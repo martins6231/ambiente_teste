@@ -647,7 +647,7 @@ def criar_grafico_distribuicao_duracao(df):
         nbins=20,
         labels={'x': 'Duração (minutos)', 'y': 'Frequência'},
         title="Distribuição da Duração das Paradas",
-        color_discrete_sequence=['#1abc9c']
+        color_discrete_sequence=['#3498db']
     )
     
     fig.update_layout(
@@ -667,174 +667,278 @@ def criar_grafico_distribuicao_duracao(df):
     
     return fig
 
-# ----- FUNÇÕES DE ANÁLISE E RELATÓRIO -----
-@st.cache_data
-def gerar_recomendacoes(df, disponibilidade, eficiencia):
-    """Gera recomendações automáticas com base nos dados analisados."""
-    recomendacoes = []
-    
-    # Verifica a disponibilidade
-    if disponibilidade < 70:
-        recomendacoes.append("⚠️ A disponibilidade está abaixo do nível recomendado (70%). Priorize a redução do tempo de paradas não programadas.")
-    elif disponibilidade < 85:
-        recomendacoes.append("⚠️ A disponibilidade está em nível moderado. Considere implementar melhorias no processo de manutenção preventiva.")
-    else:
-        recomendacoes.append("✅ A disponibilidade está em um bom nível. Continue monitorando para manter este desempenho.")
-    
-    # Verifica a eficiência
-    if eficiencia < 65:
-        recomendacoes.append("⚠️ A eficiência operacional está baixa. Analise as causas mais frequentes de paradas e implemente ações corretivas.")
-    elif eficiencia < 80:
-        recomendacoes.append("⚠️ A eficiência operacional está em nível moderado. Busque otimizar os processos para reduzir o tempo de paradas.")
-    else:
-        recomendacoes.append("✅ A eficiência operacional está em um bom nível. Continue com as práticas atuais de manutenção.")
-    
-    # Análise das paradas críticas
-    paradas_criticas, percentual_criticas = indice_paradas_criticas(df)
-    if percentual_criticas > 20:
-        recomendacoes.append(f"⚠️ Alta incidência de paradas críticas ({percentual_criticas:.1f}%). Revise os procedimentos de manutenção corretiva.")
-    elif percentual_criticas > 10:
-        recomendacoes.append(f"⚠️ Incidência moderada de paradas críticas ({percentual_criticas:.1f}%). Implemente um plano de ação para reduzir este índice.")
-    else:
-        recomendacoes.append(f"✅ Baixa incidência de paradas críticas ({percentual_criticas:.1f}%). Continue monitorando para manter este desempenho.")
-    
-    # Análise de áreas responsáveis
-    if 'Área Responsável' in df.columns:
-        areas = indice_paradas_por_area(df)
-        if not areas.empty:
-            area_mais_problematica = areas.idxmax()
-            percentual_area = areas.max()
-            if percentual_area > 40:
-                recomendacoes.append(f"⚠️ A área de {area_mais_problematica} é responsável por {percentual_area:.1f}% das paradas. Priorize ações nesta área.")
-    
-    # Análise de tendência
-    ocorrencias = taxa_ocorrencia_paradas(df)
-    if len(ocorrencias) >= 3:
-        tendencia = ocorrencias.iloc[-1] - ocorrencias.iloc[0]
-        if tendencia > 0:
-            recomendacoes.append("⚠️ Tendência de aumento no número de paradas. Revise os procedimentos de manutenção preventiva.")
-        elif tendencia < 0:
-            recomendacoes.append("✅ Tendência de redução no número de paradas. Continue com as melhorias implementadas.")
-    
-    return recomendacoes
-
-@st.cache_data
-def get_download_link(df, filename, text):
+# ----- FUNÇÕES DE EXPORTAÇÃO -----
+def get_download_link(df, filename, link_text):
     """Gera um link para download de um DataFrame como arquivo Excel."""
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df.to_excel(writer, sheet_name='Dados', index=True)
+        df.to_excel(writer, sheet_name='Sheet1', index=True)
     
     b64 = base64.b64encode(output.getvalue()).decode()
-    href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}">{text}</a>'
+    href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}">{link_text}</a>'
     return href
 
-# ----- FUNÇÃO PRINCIPAL DE ANÁLISE -----
-def analisar_dados(df, maquina_selecionada, mes_selecionado):
-    """Realiza a análise completa dos dados com base nos filtros selecionados."""
+# ----- FUNÇÕES DE ANÁLISE -----
+def analisar_dados(df, maquina, data_inicio, data_fim):
+    """Realiza a análise dos dados com base nos filtros selecionados."""
+    st.markdown('<div class="section-title">Análise de Eficiência</div>', unsafe_allow_html=True)
+    
     # Filtra os dados conforme seleção
     dados_filtrados = df.copy()
     
-    if maquina_selecionada != "Todas":
-        dados_filtrados = dados_filtrados[dados_filtrados['Máquina'] == maquina_selecionada]
+    if maquina != "Todas":
+        dados_filtrados = dados_filtrados[dados_filtrados['Máquina'] == maquina]
     
-    if mes_selecionado != "Todos":
-        dados_filtrados = dados_filtrados[dados_filtrados['Ano-Mês'] == mes_selecionado]
+    # Filtro por período (substituindo o filtro por mês)
+    dados_filtrados = dados_filtrados[(dados_filtrados['Inicio'].dt.date >= data_inicio) & 
+                                      (dados_filtrados['Inicio'].dt.date <= data_fim)]
     
-    # Define o tempo programado (24 horas por dia * número de dias no período)
-    if mes_selecionado != "Todos":
-        # Obtém o número de dias no mês selecionado
-        ano, mes = map(int, mes_selecionado.split('-'))
-        dias_no_mes = pd.Period(f"{ano}-{mes}").days_in_month
-    else:
-        # Se todos os meses estiverem selecionados, usa o intervalo total dos dados
-        dias_no_mes = (dados_filtrados['Inicio'].max() - dados_filtrados['Inicio'].min()).days + 1
-        dias_no_mes = max(30, dias_no_mes)  # Usa pelo menos 30 dias para evitar divisão por zero
+    # Exibe a informação sobre o filtro aplicado
+    periodo_texto = f"Período: {data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}"
+    st.markdown(f"<h3 style='text-align: center;'>{maquina} | {periodo_texto}</h3>", unsafe_allow_html=True)
     
-    # Tempo programado em horas (24 horas por dia)
-    tempo_programado_horas = dias_no_mes * 24
-    tempo_programado = pd.Timedelta(hours=tempo_programado_horas)
+    # Verifica se há dados após a filtragem
+    if dados_filtrados.empty:
+        st.warning("⚠️ Nenhum dado encontrado para os filtros selecionados.")
+        return
     
-    # Calcula os indicadores
-    disponibilidade = calcular_disponibilidade(dados_filtrados, tempo_programado)
-    eficiencia = eficiencia_operacional(dados_filtrados, tempo_programado)
-    tempo_medio = tempo_medio_paradas(dados_filtrados)
+    # Define tempo programado (assume 24 horas por dia para simplificar)
+    num_dias = (dados_filtrados['Inicio'].max() - dados_filtrados['Inicio'].min()).days + 1
+    tempo_programado = pd.Timedelta(hours=24 * num_dias)
     
-    # Calcula o tempo total de paradas em horas
-    tempo_total_paradas = dados_filtrados['Duração'].sum()
-    tempo_total_paradas_horas = tempo_total_paradas.total_seconds() / 3600
-    
-    # Calcula o número total de paradas
+    # Cálculos para métricas
     total_paradas = len(dados_filtrados)
+    tempo_total_parado = dados_filtrados['Duração'].sum()
+    tempo_medio = tempo_medio_paradas(dados_filtrados)
+    disponibilidade = calcular_disponibilidade(dados_filtrados, tempo_programado)
     
-    # Calcula o MTBF (Mean Time Between Failures) em horas
+    # Calcula o tempo médio entre falhas (MTBF) se houver mais de uma parada
     if total_paradas > 1:
-        mtbf = (tempo_programado - tempo_total_paradas).total_seconds() / 3600 / total_paradas
+        # Ordena as paradas por hora de início
+        paradas_ordenadas = dados_filtrados.sort_values('Inicio')
+        # Calcula a diferença entre o início de cada parada
+        diferencas = paradas_ordenadas['Inicio'].diff().dropna()
+        # Remove diferenças muito pequenas (menos de 1 minuto) que podem ser registros duplicados
+        diferencas = diferencas[diferencas > pd.Timedelta(minutes=1)]
+        mtbf = diferencas.mean() if not diferencas.empty else pd.Timedelta(hours=0)
     else:
-        mtbf = 0
+        mtbf = pd.Timedelta(hours=0)
     
-    # Calcula o MTTR (Mean Time To Repair) em horas
-    if total_paradas > 0:
-        mttr = tempo_total_paradas.total_seconds() / 3600 / total_paradas
-    else:
-        mttr = 0
-    
-    # Gera recomendações
-    recomendacoes = gerar_recomendacoes(dados_filtrados, disponibilidade, eficiencia)
-    
-    # Análises adicionais
-    indice_paradas = indice_paradas_por_area(dados_filtrados)
-    pareto = pareto_causas_parada(dados_filtrados)
-    ocorrencias = taxa_ocorrencia_paradas(dados_filtrados)
-    tempo_area = tempo_total_paradas_area(dados_filtrados)
-    
-    # Análise de paradas críticas
+    # Calcula as paradas críticas (acima de 1 hora)
     paradas_criticas, percentual_criticas = indice_paradas_criticas(dados_filtrados)
-    top_paradas_criticas = paradas_criticas.groupby('Parada')['Duração'].sum().sort_values(ascending=False).head(10)
     
-    # Novas análises
-    paradas_frequentes = paradas_mais_frequentes(dados_filtrados)
+    # Exibe as métricas principais
+    st.markdown('<div class="content-box metrics-container">', unsafe_allow_html=True)
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.markdown('<div class="metric-box">', unsafe_allow_html=True)
+        st.markdown(f'<p class="metric-value">{total_paradas}</p>', unsafe_allow_html=True)
+        st.markdown('<p class="metric-label">Total de Paradas</p>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown('<div class="metric-box">', unsafe_allow_html=True)
+        st.markdown(f'<p class="metric-value">{formatar_duracao(tempo_total_parado)}</p>', unsafe_allow_html=True)
+        st.markdown('<p class="metric-label">Tempo Total Parado</p>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown('<div class="metric-box">', unsafe_allow_html=True)
+        st.markdown(f'<p class="metric-value">{disponibilidade:.1f}%</p>', unsafe_allow_html=True)
+        st.markdown('<p class="metric-label">Disponibilidade</p>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col4:
+        st.markdown('<div class="metric-box">', unsafe_allow_html=True)
+        st.markdown(f'<p class="metric-value">{formatar_duracao(tempo_medio)}</p>', unsafe_allow_html=True)
+        st.markdown('<p class="metric-label">Tempo Médio de Parada</p>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Segunda linha de métricas
+    st.markdown('<div class="content-box metrics-container">', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown('<div class="metric-box">', unsafe_allow_html=True)
+        st.markdown(f'<p class="metric-value">{formatar_duracao(mtbf)}</p>', unsafe_allow_html=True)
+        st.markdown('<p class="metric-label">Tempo Médio Entre Falhas</p>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown('<div class="metric-box">', unsafe_allow_html=True)
+        st.markdown(f'<p class="metric-value">{len(paradas_criticas)}</p>', unsafe_allow_html=True)
+        st.markdown('<p class="metric-label">Paradas Críticas (>1h)</p>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown('<div class="metric-box">', unsafe_allow_html=True)
+        st.markdown(f'<p class="metric-value">{percentual_criticas:.1f}%</p>', unsafe_allow_html=True)
+        st.markdown('<p class="metric-label">% de Paradas Críticas</p>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Calcula dados para gráficos
+    pareto = pareto_causas_parada(dados_filtrados)
+    indice_areas = indice_paradas_por_area(dados_filtrados)
+    ocorrencias = taxa_ocorrencia_paradas(dados_filtrados)
     duracao_mensal = duracao_total_por_mes(dados_filtrados)
+    tempo_areas = tempo_total_paradas_area(dados_filtrados)
     
-    # Armazena os resultados na sessão
-    st.session_state.resultados = {
-        'disponibilidade': disponibilidade,
-        'eficiencia': eficiencia,
-        'tempo_medio': tempo_medio,
-        'tempo_total_paradas': tempo_total_paradas,
-        'tempo_total_paradas_horas': tempo_total_paradas_horas,
-        'total_paradas': total_paradas,
-        'mtbf': mtbf,
-        'mttr': mttr,
-        'indice_paradas': indice_paradas,
-        'pareto': pareto,
-        'ocorrencias': ocorrencias,
-        'tempo_area': tempo_area,
-        'paradas_criticas': paradas_criticas,
-        'percentual_criticas': percentual_criticas,
-        'top_paradas_criticas': top_paradas_criticas,
-        'recomendacoes': recomendacoes,
-        'maquina_selecionada': maquina_selecionada,
-        'mes_selecionado': mes_selecionado,
-        'tempo_programado_horas': tempo_programado_horas,
-        'paradas_frequentes': paradas_frequentes,
-        'duracao_mensal': duracao_mensal
-    }
+    # Top paradas críticas
+    if not paradas_criticas.empty and 'Parada' in paradas_criticas.columns:
+        top_criticas = paradas_criticas.groupby('Parada')['Duração'].sum().sort_values(ascending=False).head(10)
+    else:
+        top_criticas = pd.Series()
     
-    return st.session_state.resultados
+    # ----- VISUALIZAÇÕES -----
+    st.markdown('<div class="section-title">Análise de Causas e Tendências</div>', unsafe_allow_html=True)
+    
+    # Primeira linha de gráficos
+    st.markdown('<div class="content-box chart-container">', unsafe_allow_html=True)
+    
+    tab1, tab2 = st.tabs(["📊 Pareto de Causas", "🍩 Índice por Área"])
+    
+    with tab1:
+        fig_pareto = criar_grafico_pareto(pareto)
+        if fig_pareto:
+            st.plotly_chart(fig_pareto, use_container_width=True)
+        else:
+            st.info("Dados insuficientes para gerar o gráfico de Pareto.")
+    
+    with tab2:
+        fig_areas = criar_grafico_pizza_areas(indice_areas)
+        if fig_areas:
+            st.plotly_chart(fig_areas, use_container_width=True)
+        else:
+            st.info("Dados insuficientes para gerar o gráfico de áreas.")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Segunda linha de gráficos
+    st.markdown('<div class="content-box chart-container">', unsafe_allow_html=True)
+    
+    tab1, tab2 = st.tabs(["📈 Ocorrências por Mês", "📉 Duração por Mês"])
+    
+    with tab1:
+        fig_ocorrencias = criar_grafico_ocorrencias(ocorrencias)
+        if fig_ocorrencias:
+            st.plotly_chart(fig_ocorrencias, use_container_width=True)
+        else:
+            st.info("Dados insuficientes para gerar o gráfico de ocorrências por mês.")
+    
+    with tab2:
+        fig_duracao = criar_grafico_duracao_mensal(duracao_mensal)
+        if fig_duracao:
+            st.plotly_chart(fig_duracao, use_container_width=True)
+        else:
+            st.info("Dados insuficientes para gerar o gráfico de duração por mês.")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Terceira linha de gráficos
+    st.markdown('<div class="content-box chart-container">', unsafe_allow_html=True)
+    
+    tab1, tab2 = st.tabs(["⏱️ Tempo por Área", "⚠️ Paradas Críticas"])
+    
+    with tab1:
+        fig_tempo_areas = criar_grafico_tempo_area(tempo_areas)
+        if fig_tempo_areas:
+            st.plotly_chart(fig_tempo_areas, use_container_width=True)
+        else:
+            st.info("Dados insuficientes para gerar o gráfico de tempo por área.")
+    
+    with tab2:
+        fig_paradas_criticas = criar_grafico_paradas_criticas(top_criticas)
+        if fig_paradas_criticas:
+            st.plotly_chart(fig_paradas_criticas, use_container_width=True)
+        else:
+            st.info("Dados insuficientes para gerar o gráfico de paradas críticas.")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Quarta linha com análises adicionais
+    st.markdown('<div class="section-title">Análises Adicionais</div>', unsafe_allow_html=True)
+    
+    st.markdown('<div class="content-box chart-container">', unsafe_allow_html=True)
+    
+    tab1, tab2 = st.tabs(["📊 Distribuição de Duração", "🔍 Áreas Críticas"])
+    
+    with tab1:
+        fig_distribuicao = criar_grafico_distribuicao_duracao(dados_filtrados)
+        if fig_distribuicao:
+            st.plotly_chart(fig_distribuicao, use_container_width=True)
+        else:
+            st.info("Dados insuficientes para gerar o histograma de distribuição.")
+    
+    with tab2:
+        fig_areas_criticas = criar_grafico_pizza_areas_criticas(paradas_criticas)
+        if fig_areas_criticas:
+            st.plotly_chart(fig_areas_criticas, use_container_width=True)
+        else:
+            st.info("Dados insuficientes para gerar o gráfico de áreas críticas.")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Recomendações baseadas na análise
+    st.markdown('<div class="section-title">Insights e Recomendações</div>', unsafe_allow_html=True)
+    
+    st.markdown('<div class="content-box">', unsafe_allow_html=True)
+    
+    # Principais problemas identificados
+    if not pareto.empty:
+        st.markdown("### 🔍 Principais Problemas Identificados")
+        
+        # Top 3 causas de parada
+        top3_causas = pareto.head(3)
+        st.markdown("#### Top 3 Causas de Parada por Duração:")
+        for causa, duracao in top3_causas.items():
+            horas = duracao.total_seconds() / 3600
+            st.markdown(f"- **{causa}**: {horas:.1f} horas ({(horas / (tempo_total_parado.total_seconds() / 3600) * 100):.1f}% do tempo total)")
+    
+    # Recomendações
+    st.markdown("### 💡 Recomendações")
+    
+    if not pareto.empty:
+        top_causa = pareto.index[0]
+        st.markdown(f"1. **Priorizar a resolução** da causa principal de paradas: **{top_causa}**")
+    
+    if not indice_areas.empty:
+        top_area = indice_areas.index[0]
+        st.markdown(f"2. **Analisar processos e treinamentos** da área com maior índice de paradas: **{top_area}**")
+    
+    if not paradas_criticas.empty:
+        st.markdown(f"3. **Desenvolver planos de contingência** para reduzir o número de paradas críticas (acima de 1 hora)")
+    
+    st.markdown("4. **Implementar manutenção preventiva** em componentes críticos para aumentar o MTBF")
+    
+    st.markdown("5. **Revisar procedimentos operacionais** para reduzir o tempo médio de parada")
+    
+    # Link para download dos dados analisados
+    st.markdown("### 📥 Exportar Dados Analisados")
+    
+    st.markdown(
+        get_download_link(dados_filtrados, 'analise_paradas.xlsx', '📥 Baixar dados analisados'),
+        unsafe_allow_html=True
+    )
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# ----- FUNÇÃO PRINCIPAL DA APLICAÇÃO -----
+# ----- INICIALIZAÇÃO DA SESSÃO -----
+# Inicializa variáveis de estado da sessão
+if 'df' not in st.session_state:
+    st.session_state.df = None
+if 'first_load' not in st.session_state:
+    st.session_state.first_load = False
+
+# ----- INTERFACE PRINCIPAL -----
 def main():
     """Função principal que controla o fluxo da aplicação."""
-    # Inicializa a sessão se necessário
-    if 'df' not in st.session_state:
-        st.session_state.df = None
-    
-    if 'resultados' not in st.session_state:
-        st.session_state.resultados = None
-    
-    if 'first_load' not in st.session_state:
-        st.session_state.first_load = False
+    # Título principal
+    st.markdown('<div class="main-title">Análise de Eficiência de Máquinas</div>', unsafe_allow_html=True)
     
     # Menu de navegação
     selected = option_menu(
@@ -845,348 +949,87 @@ def main():
         default_index=0,
         orientation="horizontal",
         styles={
-            "container": {"padding": "0!important", "background-color": "#f8f9fa", "border-radius": "10px", "margin-bottom": "20px"},
-            "icon": {"color": "#3498db", "font-size": "14px"},
-            "nav-link": {"font-size": "14px", "text-align": "center", "margin": "0px", "--hover-color": "#eee"},
-            "nav-link-selected": {"background-color": "#3498db", "color": "white"},
+            "container": {"padding": "0!important", "margin": "0!important"},
+            "icon": {"color": "#2a9d8f", "font-size": "18px"},
+            "nav-link": {
+                "font-size": "16px",
+                "text-align": "center",
+                "margin": "0px",
+                "padding": "10px",
+                "--hover-color": "#eee",
+            },
+            "nav-link-selected": {"background-color": "#2a9d8f", "color": "white"},
         }
     )
     
-# Espaço para logo da empresa
-    with st.container():
-        st.markdown('<div class="logo-container">', unsafe_allow_html=True)
-        # Logo da Britvic
-        logo_url = "https://raw.githubusercontent.com/martins6231/app_atd/main/britvic_logo.png"
-        st.image(logo_url, width=200, output_format="PNG", use_container_width=False)
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Título principal
-    st.markdown('<div class="main-title">Análise de Eficiência de Máquinas</div>', unsafe_allow_html=True)
-    
     if selected == "Dashboard":
         # Seção de upload de arquivo
+        st.markdown('<div class="section-title">Importação de Dados</div>', unsafe_allow_html=True)
+        
         with st.container():
             st.markdown('<div class="content-box">', unsafe_allow_html=True)
-            st.markdown("### 📤 Upload de Dados")
+            st.markdown(
+                """
+                Faça o upload de um arquivo Excel contendo os registros de paradas de máquinas. 
+                O arquivo deve conter as colunas: Máquina, Inicio, Fim, Duração, Parada e Área Responsável.
+                """
+            )
             
-            uploaded_file = st.file_uploader("Selecione um arquivo Excel com os dados de paradas", type=["xlsx", "xls"])
+            uploaded_file = st.file_uploader("Selecione um arquivo Excel", type=['xlsx', 'xls'])
             
             if uploaded_file is not None:
                 try:
                     df = pd.read_excel(uploaded_file)
                     st.session_state.df = processar_dados(df)
-                    st.success(f"✅ Arquivo carregado com sucesso! {len(st.session_state.df)} registros processados.")
+                    st.success(f"✅ Arquivo carregado com sucesso! {len(st.session_state.df)} registros encontrados.")
                 except Exception as e:
-                    st.error(f"❌ Erro ao processar o arquivo: {str(e)}")
+                    st.error(f"❌ Erro ao carregar o arquivo: {str(e)}")
+            
             st.markdown('</div>', unsafe_allow_html=True)
         
-        # Se houver dados carregados, exibe os filtros e a análise
+        # Seção de filtros e análise
         if st.session_state.df is not None:
+            st.markdown('<div class="section-title">Filtros</div>', unsafe_allow_html=True)
+            
             with st.container():
                 st.markdown('<div class="content-box">', unsafe_allow_html=True)
-                st.markdown("### 🔍 Filtros de Análise")
-                
                 col1, col2 = st.columns(2)
                 
                 with col1:
                     # Filtro de máquina
-                    maquinas_disponiveis = ["Todas"] + sorted(st.session_state.df['Máquina'].unique().tolist())
-                    maquina_selecionada = st.selectbox("Selecione a Máquina:", maquinas_disponiveis)
+                    maquinas = ["Todas"] + sorted(st.session_state.df['Máquina'].unique().tolist())
+                    maquina_selecionada = st.selectbox("Selecione uma Máquina:", maquinas)
                 
                 with col2:
-                    # Filtro de mês
-                    meses_disponiveis = ["Todos"] + sorted(st.session_state.df['Ano-Mês'].unique().tolist())
-                    mes_selecionado = st.selectbox("Selecione o Mês:", meses_disponiveis)
+                    # Filtro de período (substituindo o filtro de mês)
+                    st.markdown("**Selecione o período:**")
+                    col2a, col2b = st.columns(2)
+                    with col2a:
+                        data_inicio = st.date_input("Data Inicial", 
+                                                 value=st.session_state.df['Inicio'].min().date() if st.session_state.df is not None else None,
+                                                 min_value=st.session_state.df['Inicio'].min().date() if st.session_state.df is not None else None,
+                                                 max_value=st.session_state.df['Inicio'].max().date() if st.session_state.df is not None else None)
+                    with col2b:
+                        data_fim = st.date_input("Data Final", 
+                                               value=st.session_state.df['Inicio'].max().date() if st.session_state.df is not None else None,
+                                               min_value=st.session_state.df['Inicio'].min().date() if st.session_state.df is not None else None,
+                                               max_value=st.session_state.df['Inicio'].max().date() if st.session_state.df is not None else None)
                 
-                # Botão para analisar
-                if st.button("Analisar", key="btn_analisar"):
-                    with st.spinner("Analisando dados..."):
-                        analisar_dados(st.session_state.df, maquina_selecionada, mes_selecionado)
-                st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Exibe os resultados se disponíveis
-            if st.session_state.resultados:
-                # Extrai os resultados da sessão
-                resultados = st.session_state.resultados
-                
-                # Título da seção de resultados
-                maquina_texto = resultados['maquina_selecionada']
-                mes_texto = obter_nome_mes(resultados['mes_selecionado'])
-                
-                st.markdown(f'<div class="section-title">Resultados da Análise: {maquina_texto} - {mes_texto}</div>', unsafe_allow_html=True)
-                
-                # Indicadores principais
-                st.markdown('<div class="metrics-container">', unsafe_allow_html=True)
-                
-                # Disponibilidade
-                st.markdown(
-                    f"""
-                    <div class="metric-box">
-                        <div class="metric-value">{resultados['disponibilidade']:.1f}%</div>
-                        <div class="metric-label">Disponibilidade</div>
-                    </div>
-                    """, 
-                    unsafe_allow_html=True
-                )
-                
-                # Eficiência
-                st.markdown(
-                    f"""
-                    <div class="metric-box">
-                        <div class="metric-value">{resultados['eficiencia']:.1f}%</div>
-                        <div class="metric-label">Eficiência Operacional</div>
-                    </div>
-                    """, 
-                    unsafe_allow_html=True
-                )
-                
-                # MTBF
-                st.markdown(
-                    f"""
-                    <div class="metric-box">
-                        <div class="metric-value">{resultados['mtbf']:.1f}h</div>
-                        <div class="metric-label">MTBF</div>
-                    </div>
-                    """, 
-                    unsafe_allow_html=True
-                )
-                
-                # MTTR
-                st.markdown(
-                    f"""
-                    <div class="metric-box">
-                        <div class="metric-value">{resultados['mttr']:.1f}h</div>
-                        <div class="metric-label">MTTR</div>
-                    </div>
-                    """, 
-                    unsafe_allow_html=True
-                )
+                # Botão para realizar a análise
+                if st.button("Analisar Dados", type="primary", use_container_width=True):
+                    if st.session_state.df is not None:
+                        analisar_dados(st.session_state.df, maquina_selecionada, data_inicio, data_fim)
+                    else:
+                        st.error("⚠️ Nenhum dado foi carregado. Por favor, faça o upload de um arquivo Excel.")
                 
                 st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Resumo dos dados analisados
-                with st.container():
-                    st.markdown('<div class="content-box">', unsafe_allow_html=True)
-                    st.markdown("### 📊 Resumo da Análise")
-                    
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        st.markdown(f"**Período Analisado:** {mes_texto}")
-                        st.markdown(f"**Máquina:** {maquina_texto}")
-                        st.markdown(f"**Tempo Programado:** {resultados['tempo_programado_horas']:.1f} horas")
-                    
-                    with col2:
-                        st.markdown(f"**Total de Paradas:** {resultados['total_paradas']} ocorrências")
-                        st.markdown(f"**Tempo Total de Paradas:** {resultados['tempo_total_paradas_horas']:.1f} horas")
-                        st.markdown(f"**Tempo Médio por Parada:** {resultados['tempo_medio'].total_seconds() / 60:.1f} minutos")
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Tabelas de Resumo
-                st.markdown('<div class="section-title">Tabelas de Resumo</div>', unsafe_allow_html=True)
-                
-                # Duas colunas para as tabelas
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown('<div class="content-box">', unsafe_allow_html=True)
-                    st.markdown("### 📋 Top 10 Paradas Mais Frequentes")
-                    
-                    if not resultados['paradas_frequentes'].empty:
-                        # Cria um DataFrame para melhor formatação
-                        df_frequentes = pd.DataFrame({
-                            'Tipo de Parada': resultados['paradas_frequentes'].index,
-                            'Número de Ocorrências': resultados['paradas_frequentes'].values
-                        })
-                        
-                        st.dataframe(
-                            df_frequentes,
-                            column_config={
-                                "Tipo de Parada": st.column_config.TextColumn("Tipo de Parada"),
-                                "Número de Ocorrências": st.column_config.NumberColumn("Número de Ocorrências", format="%d")
-                            },
-                            use_container_width=True,
-                            hide_index=True
-                        )
-                    else:
-                        st.info("Dados insuficientes para análise de paradas frequentes.")
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                with col2:
-                    st.markdown('<div class="content-box">', unsafe_allow_html=True)
-                    st.markdown("### ⏱️ Top 10 Paradas Mais Longas")
-                    
-                    if not resultados['pareto'].empty:
-                        # Converte durações para horas
-                        pareto_horas = resultados['pareto'].apply(lambda x: x.total_seconds() / 3600)
-                        
-                        # Cria um DataFrame para melhor formatação
-                        df_longas = pd.DataFrame({
-                            'Tipo de Parada': pareto_horas.index,
-                            'Duração Total (horas)': pareto_horas.values
-                        })
-                        
-                        st.dataframe(
-                            df_longas,
-                            column_config={
-                                "Tipo de Parada": st.column_config.TextColumn("Tipo de Parada"),
-                                "Duração Total (horas)": st.column_config.NumberColumn("Duração Total (horas)", format="%.2f")
-                            },
-                            use_container_width=True,
-                            hide_index=True
-                        )
-                    else:
-                        st.info("Dados insuficientes para análise de paradas longas.")
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Análise Temporal
-                st.markdown('<div class="section-title">Análise Temporal</div>', unsafe_allow_html=True)
-                
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                    fig_ocorrencias = criar_grafico_ocorrencias(resultados['ocorrencias'])
-                    if fig_ocorrencias:
-                        st.plotly_chart(fig_ocorrencias, use_container_width=True)
-                    else:
-                        st.info("Dados insuficientes para análise de tendência mensal.")
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                with col2:
-                    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                    fig_duracao_mensal = criar_grafico_duracao_mensal(resultados['duracao_mensal'])
-                    if fig_duracao_mensal:
-                        st.plotly_chart(fig_duracao_mensal, use_container_width=True)
-                    else:
-                        st.info("Dados insuficientes para análise de duração mensal.")
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Análise Gráfica
-                st.markdown('<div class="section-title">Análise Gráfica</div>', unsafe_allow_html=True)
-                
-                # Gráficos em duas colunas
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                    fig_pareto = criar_grafico_pareto(resultados['pareto'])
-                    if fig_pareto:
-                        st.plotly_chart(fig_pareto, use_container_width=True)
-                    else:
-                        st.info("Dados insuficientes para gráfico de Pareto.")
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                with col2:
-                    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                    fig_area = criar_grafico_pizza_areas(resultados['indice_paradas'])
-                    if fig_area:
-                        st.plotly_chart(fig_area, use_container_width=True)
-                    else:
-                        st.info("Nenhuma parada por área disponível.")
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Segunda linha de gráficos
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                    fig_tempo_area = criar_grafico_tempo_area(resultados['tempo_area'])
-                    if fig_tempo_area:
-                        st.plotly_chart(fig_tempo_area, use_container_width=True)
-                    else:
-                        st.info("Nenhum dado de tempo por área disponível.")
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                with col2:
-                    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                    fig_distribuicao = criar_grafico_distribuicao_duracao(resultados['paradas_criticas'])
-                    if fig_distribuicao:
-                        st.plotly_chart(fig_distribuicao, use_container_width=True)
-                    else:
-                        st.info("Dados insuficientes para análise de distribuição.")
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Análise de Paradas Críticas
-                st.markdown('<div class="section-title">Análise de Paradas Críticas</div>', unsafe_allow_html=True)
-                
-                # Gráficos em duas colunas
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                    fig_paradas_criticas = criar_grafico_paradas_criticas(resultados['top_paradas_criticas'])
-                    if fig_paradas_criticas:
-                        st.plotly_chart(fig_paradas_criticas, use_container_width=True)
-                    else:
-                        st.info("Nenhuma parada crítica identificada.")
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                with col2:
-                    st.markdown('<div class="chart-container">', unsafe_allow_html=True)
-                    fig_areas_criticas = criar_grafico_pizza_areas_criticas(resultados['paradas_criticas'])
-                    if fig_areas_criticas:
-                        st.plotly_chart(fig_areas_criticas, use_container_width=True)
-                    else:
-                        st.info("Nenhuma parada crítica por área disponível.")
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Recomendações
-                st.markdown('<div class="section-title">Recomendações</div>', unsafe_allow_html=True)
-                
-                with st.container():
-                    st.markdown('<div class="content-box">', unsafe_allow_html=True)
-                    st.markdown("### 💡 Insights e Ações Recomendadas")
-                    
-                    for rec in resultados['recomendacoes']:
-                        st.markdown(f"- {rec}")
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
-                
-                # Exportação de dados
-                with st.container():
-                    st.markdown('<div class="content-box">', unsafe_allow_html=True)
-                    st.markdown("### 📥 Exportar Resultados")
-                    
-                    col1, col2 = st.columns(2)
-                    
-                    with col1:
-                        # Exportar dados filtrados
-                        dados_filtrados = st.session_state.df.copy()
-                        if resultados['maquina_selecionada'] != "Todas":
-                            dados_filtrados = dados_filtrados[dados_filtrados['Máquina'] == resultados['maquina_selecionada']]
-                        if resultados['mes_selecionado'] != "Todos":
-                            dados_filtrados = dados_filtrados[dados_filtrados['Ano-Mês'] == resultados['mes_selecionado']]
-                        
-                        st.markdown(
-                            get_download_link(dados_filtrados, 'dados_analisados.xlsx', '📥 Baixar dados analisados'),
-                            unsafe_allow_html=True
-                        )
-                    
-                    with col2:
-                        # Exportar paradas críticas
-                        if not resultados['paradas_criticas'].empty:
-                            st.markdown(
-                                get_download_link(resultados['paradas_criticas'], 'paradas_criticas.xlsx', '📥 Baixar paradas críticas'),
-                                unsafe_allow_html=True
-                            )
-                    
-                    st.markdown('</div>', unsafe_allow_html=True)
-            
-            # Botão para limpar os dados
-            with st.container():
-                if st.button("Limpar Dados", key="btn_limpar"):
-                    st.session_state.resultados = None
-                    st.session_state.df = None
-                    st.rerun()
             
             # Realiza a análise com os filtros padrão na primeira carga
             if not st.session_state.first_load and st.session_state.df is not None:
                 st.session_state.first_load = True
-                analisar_dados(st.session_state.df, "Todas", "Todos")
+                data_inicio_padrao = st.session_state.df['Inicio'].min().date()
+                data_fim_padrao = st.session_state.df['Inicio'].max().date()
+                analisar_dados(st.session_state.df, "Todas", data_inicio_padrao, data_fim_padrao)
     
     elif selected == "Dados":
         if st.session_state.df is not None:
@@ -1203,9 +1046,19 @@ def main():
                     maquina_filtro = st.selectbox("Filtrar por Máquina:", maquinas_para_filtro)
                 
                 with col2:
-                    # Filtro de mês
-                    meses_para_filtro = ["Todos"] + sorted(st.session_state.df['Ano-Mês'].unique().tolist())
-                    mes_filtro = st.selectbox("Filtrar por Mês:", meses_para_filtro)
+                    # Filtro de período (substituindo o filtro de mês)
+                    st.markdown("**Selecione o período:**")
+                    col2a, col2b = st.columns(2)
+                    with col2a:
+                        data_inicio_filtro = st.date_input("Data Inicial (Filtro)", 
+                                                        value=st.session_state.df['Inicio'].min().date(),
+                                                        min_value=st.session_state.df['Inicio'].min().date(),
+                                                        max_value=st.session_state.df['Inicio'].max().date())
+                    with col2b:
+                        data_fim_filtro = st.date_input("Data Final (Filtro)", 
+                                                     value=st.session_state.df['Inicio'].max().date(),
+                                                     min_value=st.session_state.df['Inicio'].min().date(),
+                                                     max_value=st.session_state.df['Inicio'].max().date())
                 
                 # Aplica os filtros
                 dados_filtrados = st.session_state.df.copy()
@@ -1213,8 +1066,9 @@ def main():
                 if maquina_filtro != "Todas":
                     dados_filtrados = dados_filtrados[dados_filtrados['Máquina'] == maquina_filtro]
                 
-                if mes_filtro != "Todos":
-                    dados_filtrados = dados_filtrados[dados_filtrados['Ano-Mês'] == mes_filtro]
+                # Filtro por período (substituindo o filtro por mês)
+                dados_filtrados = dados_filtrados[(dados_filtrados['Inicio'].dt.date >= data_inicio_filtro) & 
+                                                 (dados_filtrados['Inicio'].dt.date <= data_fim_filtro)]
                 
                 # Exibe os dados filtrados
                 st.markdown(f"**Mostrando {len(dados_filtrados)} registros**")
@@ -1225,7 +1079,7 @@ def main():
                     height=400
                 )
                 
-                                # Botão para download dos dados
+                # Botão para download dos dados
                 st.markdown(
                     get_download_link(dados_filtrados, 'dados_filtrados.xlsx', '📥 Baixar dados filtrados'),
                     unsafe_allow_html=True
@@ -1427,7 +1281,7 @@ def main():
                 
                 st.markdown('</div>', unsafe_allow_html=True)
         else:
-            st.warning("⚠️ Nenhum dado foi carregado. Por favor, vá para a página 'Dashboard' e faça o upload de um arquivo Excel.")
+                        st.warning("⚠️ Nenhum dado foi carregado. Por favor, vá para a página 'Dashboard' e faça o upload de um arquivo Excel.")
     
     elif selected == "Sobre":
         st.markdown('<div class="section-title">Sobre a Aplicação</div>', unsafe_allow_html=True)
@@ -1572,6 +1426,246 @@ def main():
         <p><small>Versão 2.1.0 | Última atualização: Maio 2025</small></p>
     </div>
     """, unsafe_allow_html=True)
+
+# Função para criar links de download
+def get_download_link(df, filename, text):
+    """Gera um link de download para um DataFrame."""
+    # Cria um buffer na memória para salvar o arquivo Excel
+    output = io.BytesIO()
+    
+    # Cria um escritor Excel
+    writer = pd.ExcelWriter(output, engine='xlsxwriter')
+    
+    # Escreve o DataFrame no buffer
+    df.to_excel(writer, index=False, sheet_name='Dados')
+    
+    # Salva o conteúdo no buffer
+    writer.close()
+    
+    # Converte o buffer para base64
+    b64 = base64.b64encode(output.getvalue()).decode()
+    
+    # Cria o link de download
+    href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="{filename}" class="download-button">{text}</a>'
+    
+    return href
+
+# Função para analisar dados (modificada para usar período)
+def analisar_dados(df, maquina, data_inicio, data_fim):
+    """Realiza a análise dos dados com base nos filtros selecionados."""
+    st.markdown('<div class="section-title">Análise de Eficiência</div>', unsafe_allow_html=True)
+    
+    # Filtra os dados conforme seleção
+    dados_filtrados = df.copy()
+    
+    if maquina != "Todas":
+        dados_filtrados = dados_filtrados[dados_filtrados['Máquina'] == maquina]
+    
+    # Filtro por período (substituindo o filtro por mês)
+    dados_filtrados = dados_filtrados[(dados_filtrados['Inicio'].dt.date >= data_inicio) & 
+                                      (dados_filtrados['Inicio'].dt.date <= data_fim)]
+    
+    # Verifica se existem dados após a filtragem
+    if dados_filtrados.empty:
+        st.warning("⚠️ Nenhum dado encontrado para os filtros selecionados. Por favor, ajuste os filtros.")
+        return
+    
+    # Exibe informações sobre a seleção atual
+    periodo_texto = f"Período: {data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}"
+    st.markdown(f"<h3 style='text-align: center;'>{maquina} | {periodo_texto}</h3>", unsafe_allow_html=True)
+    
+    # Contagem de registros e estatísticas básicas
+    st.markdown(f"**Total de registros analisados: {len(dados_filtrados)}**")
+    
+    # Calcula tempo total de paradas
+    tempo_total_horas = dados_filtrados['Duração'].sum().total_seconds() / 3600
+    
+    # Calcula tempo médio de parada
+    tempo_medio = tempo_medio_paradas(dados_filtrados)
+    
+    # Suposição: assume um tempo programado de operação (24h por dia para o período selecionado)
+    # Ajuste conforme a realidade da operação
+    dias_periodo = (data_fim - data_inicio).days + 1
+    tempo_programado_horas = dias_periodo * 24  # 24 horas por dia
+    tempo_programado = pd.Timedelta(hours=tempo_programado_horas)
+    
+    # Calcula disponibilidade e eficiência
+    disponibilidade = calcular_disponibilidade(dados_filtrados, tempo_programado)
+    eficiencia = eficiencia_operacional(dados_filtrados, tempo_programado)
+    
+    # Identifica paradas críticas
+    paradas_criticas, percentual_criticas = indice_paradas_criticas(dados_filtrados)
+    
+    # Métricas em cards
+    st.markdown('<div class="metrics-container" style="display: flex; justify-content: space-between; margin-bottom: 20px;">', unsafe_allow_html=True)
+    
+    # Card 1: Disponibilidade
+    st.markdown(f"""
+    <div class="metric-box" style="flex: 1; background-color: #f8f9fa; padding: 20px; margin: 0 10px; border-radius: 10px; text-align: center;">
+        <div class="metric-value" style="font-size: 2.5rem; font-weight: bold; color: {'#2ecc71' if disponibilidade >= 80 else '#e74c3c'};">{disponibilidade:.1f}%</div>
+        <div class="metric-label" style="font-size: 1rem; color: #7f8c8d;">Disponibilidade</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Card 2: Tempo Total de Paradas
+    st.markdown(f"""
+    <div class="metric-box" style="flex: 1; background-color: #f8f9fa; padding: 20px; margin: 0 10px; border-radius: 10px; text-align: center;">
+        <div class="metric-value" style="font-size: 2.5rem; font-weight: bold; color: #3498db;">{tempo_total_horas:.1f}h</div>
+        <div class="metric-label" style="font-size: 1rem; color: #7f8c8d;">Tempo Total de Paradas</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Card 3: Tempo Médio de Parada
+    st.markdown(f"""
+    <div class="metric-box" style="flex: 1; background-color: #f8f9fa; padding: 20px; margin: 0 10px; border-radius: 10px; text-align: center;">
+        <div class="metric-value" style="font-size: 2.5rem; font-weight: bold; color: #9b59b6;">{formatar_duracao(tempo_medio)}</div>
+        <div class="metric-label" style="font-size: 1rem; color: #7f8c8d;">Tempo Médio de Parada</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Card 4: % Paradas Críticas
+    st.markdown(f"""
+    <div class="metric-box" style="flex: 1; background-color: #f8f9fa; padding: 20px; margin: 0 10px; border-radius: 10px; text-align: center;">
+        <div class="metric-value" style="font-size: 2.5rem; font-weight: bold; color: {'#e74c3c' if percentual_criticas > 20 else '#f39c12'};">{percentual_criticas:.1f}%</div>
+        <div class="metric-label" style="font-size: 1rem; color: #7f8c8d;">Paradas Críticas (>1h)</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Gráficos de análise
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Gráfico de Pareto de causas de paradas
+        pareto = pareto_causas_parada(dados_filtrados)
+        fig_pareto = criar_grafico_pareto(pareto)
+        if fig_pareto:
+            st.plotly_chart(fig_pareto, use_container_width=True)
+        else:
+            st.info("Dados insuficientes para gerar o gráfico de Pareto.")
+        
+        # Gráfico de paradas por área
+        if 'Área Responsável' in dados_filtrados.columns:
+            indice_areas = indice_paradas_por_area(dados_filtrados)
+            fig_areas = criar_grafico_pizza_areas(indice_areas)
+            if fig_areas:
+                st.plotly_chart(fig_areas, use_container_width=True)
+            else:
+                st.info("Dados insuficientes para gerar o gráfico de áreas responsáveis.")
+    
+    with col2:
+        # Gráfico de tempo total de paradas por área
+        if 'Área Responsável' in dados_filtrados.columns:
+            tempo_areas = tempo_total_paradas_area(dados_filtrados)
+            fig_tempo_areas = criar_grafico_tempo_area(tempo_areas)
+            if fig_tempo_areas:
+                st.plotly_chart(fig_tempo_areas, use_container_width=True)
+            else:
+                st.info("Dados insuficientes para gerar o gráfico de tempo por área.")
+        
+        # Gráfico das principais paradas críticas
+        if not paradas_criticas.empty:
+            top_criticas = paradas_criticas.groupby('Parada')['Duração'].sum().sort_values(ascending=False).head(10)
+            fig_criticas = criar_grafico_paradas_criticas(top_criticas)
+            if fig_criticas:
+                st.plotly_chart(fig_criticas, use_container_width=True)
+            else:
+                st.info("Dados insuficientes para gerar o gráfico de paradas críticas.")
+    
+    # Histórico mensal (caso aplicável)
+    st.markdown("### 📈 Histórico de Paradas")
+    
+    tab1, tab2 = st.tabs(["🔢 Ocorrências Mensais", "⏱️ Duração Mensal"])
+    
+    with tab1:
+        # Filtra por máquina, mas mantém todos os meses para análise de tendência
+        dados_historico = df.copy()
+        if maquina != "Todas":
+            dados_historico = dados_historico[dados_historico['Máquina'] == maquina]
+        
+        dados_historico = dados_historico[(dados_historico['Inicio'].dt.date >= data_inicio) & 
+                                         (dados_historico['Inicio'].dt.date <= data_fim)]
+        
+        # Verifica se há pelo menos dois meses de dados para análise de tendência
+        ocorrencias = taxa_ocorrencia_paradas(dados_historico)
+        fig_ocorrencias = criar_grafico_ocorrencias(ocorrencias)
+        if fig_ocorrencias:
+            st.plotly_chart(fig_ocorrencias, use_container_width=True)
+        else:
+            st.info("É necessário ter dados de pelo menos dois meses para exibir a tendência de ocorrências.")
+    
+    with tab2:
+        # Gráfico de duração total por mês
+        duracao_mensal = duracao_total_por_mes(dados_historico)
+        fig_duracao = criar_grafico_duracao_mensal(duracao_mensal)
+        if fig_duracao:
+            st.plotly_chart(fig_duracao, use_container_width=True)
+        else:
+            st.info("É necessário ter dados de pelo menos dois meses para exibir a tendência de duração.")
+    
+    # Recomendações baseadas na análise
+    st.markdown("### 🔍 Insights e Recomendações")
+    
+    with st.container():
+        st.markdown('<div class="content-box">', unsafe_allow_html=True)
+        
+        # Principais insights
+        insights = []
+        
+        if disponibilidade < 80:
+            insights.append("A disponibilidade está abaixo do ideal (80%).")
+        
+        if percentual_criticas > 20:
+            insights.append(f"Há um percentual elevado de paradas críticas ({percentual_criticas:.1f}%).")
+        
+        if not pareto.empty:
+            top_causa = pareto.index[0]
+            duracao_top = pareto.iloc[0].total_seconds() / 3600
+            insights.append(f"A principal causa de parada é '{top_causa}' com {duracao_top:.1f} horas.")
+        
+        if 'Área Responsável' in dados_filtrados.columns and not indice_areas.empty:
+            top_area = indice_areas.index[0]
+            percentual_top = indice_areas.iloc[0]
+            insights.append(f"A área com maior índice de paradas é '{top_area}' ({percentual_top:.1f}%).")
+        
+        # Exibe os insights
+        if insights:
+            st.markdown("#### 📊 Principais Insights:")
+            for insight in insights:
+                st.markdown(f"- {insight}")
+        
+        # Recomendações
+        st.markdown("#### 🚀 Recomendações:")
+        
+        recomendacoes = []
+        
+        if disponibilidade < 80:
+            recomendacoes.append("Implementar um programa de manutenção preventiva para reduzir paradas não programadas.")
+        
+        if percentual_criticas > 20:
+            recomendacoes.append("Focar na redução das paradas críticas (>1h) para melhorar a disponibilidade.")
+        
+        if not pareto.empty:
+            recomendacoes.append(f"Criar um plano de ação específico para a causa '{pareto.index[0]}' que representa a maior parte do tempo de parada.")
+        
+        if 'Área Responsável' in dados_filtrados.columns and not indice_areas.empty:
+            recomendacoes.append(f"Realizar treinamento específico para a equipe da área '{indice_areas.index[0]}' para reduzir a incidência de paradas.")
+        
+        # Exibe as recomendações
+        if recomendacoes:
+            for i, rec in enumerate(recomendacoes):
+                st.markdown(f"{i+1}. {rec}")
+        else:
+            st.info("Dados insuficientes para gerar recomendações específicas.")
+        
+        st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Botão para download dos dados analisados
+    st.markdown(
+        get_download_link(dados_filtrados, 'analise_paradas.xlsx', '📥 Baixar dados analisados'),
+        unsafe_allow_html=True
+    )
 
 # Executa a aplicação
 if __name__ == "__main__":
