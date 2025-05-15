@@ -1,4 +1,146 @@
-# ... código anterior permanece igual ...
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from datetime import datetime
+import io
+import base64
+from streamlit_option_menu import option_menu
+
+# ----- CONFIGURAÇÃO DA PÁGINA -----
+st.set_page_config(
+    page_title="Análise de Eficiência de Máquinas",
+    page_icon="🏭",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# ----- ESTILOS CSS OTIMIZADOS -----
+def aplicar_estilos():
+    """Aplica estilos CSS otimizados e melhorados para a aplicação."""
+    st.markdown(
+        """
+        <style>
+        body {
+            font-family: 'Arial', sans-serif;
+        }
+
+        /* Principal */
+        .main-container {
+            max-width: 1200px;
+            padding: 1rem;
+            margin: auto;
+        }
+
+        /* Títulos */
+        .main-title, .section-title {
+            text-transform: uppercase;
+            text-align: center;
+            margin-bottom: 20px;
+            font-family: 'Verdana', sans-serif;
+            color: #20232a;
+        }
+
+        .main-title {
+            font-size: 3rem;
+            color: #264653;
+        }
+
+        .section-title {
+            font-size: 2rem;
+            color: #2a9d8f;
+        }
+
+        /* Botões de Ação */
+        .stButton > button {
+            background-color: #2a9d8f;
+            color: #ffffff;
+            border: none;
+            border-radius: 5px;
+            padding: 12px 24px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.3s ease;
+        }
+
+        .stButton > button:hover {
+            background-color: #21867a;
+        }
+
+        /* Caixas de Conteúdo */
+        .content-box {
+            background-color: #ffffff;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .metrics-container .metric-box {
+            border-top: 3px solid #2a9d8f;
+            transition: transform 0.3s ease;
+        }
+
+        .metric-value {
+            font-size: 2rem;
+            color: #1d3557;
+        }
+
+        .metric-label {
+            color: #457b9d;
+        }
+
+        /* Gráficos */
+        .chart-container {
+            background-color: #f7f9fb;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Upload de Arquivos */
+        .uploadedFile {
+            border: 1px dashed #2a9d8f;
+            border-radius: 5px;
+            padding: 0.5rem;
+        }
+
+        /* Responsividade */
+        @media (max-width: 768px) {
+            .main-title {
+                font-size: 2rem;
+            }
+            .section-title {
+                font-size: 1.5rem;
+            }
+            .metrics-container {
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+        </style>
+        """, 
+        unsafe_allow_html=True
+    )
+
+# Aplica os estilos CSS
+aplicar_estilos()
+
+# ----- FUNÇÕES AUXILIARES -----
+@st.cache_data
+def formatar_duracao(duracao):
+    """Formata uma duração (timedelta) para exibição amigável."""
+    if pd.isna(duracao):
+        return "00:00:00"
+    
+    total_segundos = int(duracao.total_seconds())
+    horas = total_segundos // 3600
+    minutos = (total_segundos % 3600) // 60
+    segundos = total_segundos % 60
+    
+    return f"{horas:02d}:{minutos:02d}:{segundos:02d}"
 
 # ----- FUNÇÕES AUXILIARES -----
 @st.cache_data
