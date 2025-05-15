@@ -883,7 +883,7 @@ def main():
         # Se houver dados carregados, exibe os filtros e a análise
         if st.session_state.df is not None:
     # Container para agrupar os elementos visuais e aplicar estilos (se o CSS estiver definido)
-    with st.container():
+        with st.container():
         st.markdown('<div class="content-box">', unsafe_allow_html=True)
         st.markdown("### 🔍 Filtros de Análise")
         
