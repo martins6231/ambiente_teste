@@ -882,83 +882,21 @@ def main():
         
         # Se houver dados carregados, exibe os filtros e a análise
         if st.session_state.df is not None:
-    # Container para agrupar os elementos visuais e aplicar estilos (se o CSS estiver definido)
-        with st.container():
-        st.markdown('<div class="content-box">', unsafe_allow_html=True)
-        st.markdown("### 🔍 Filtros de Análise")
-        
-        # Divide a área em duas colunas para melhor organização dos filtros
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Cria a lista de máquinas disponíveis, incluindo a opção "Todas"
-            maquinas_disponiveis = ["Todas"] + sorted(st.session_state.df['Máquina'].unique().tolist())
-            # Widget para selecionar a máquina
-            maquina_selecionada = st.selectbox("Selecione a Máquina:", maquinas_disponiveis)
-        
-        with col2:
-            # Define os limites de data com base nos dados disponíveis no DataFrame
-            min_date_df = st.session_state.df['Inicio'].min().date()
-            max_date_df = st.session_state.df['Inicio'].max().date()
-            
-            # Widgets para selecionar o intervalo de datas
-            data_inicio = st.date_input(
-                "Data de Início", 
-                value=min_date_df, # Valor inicial padrão
-                min_value=min_date_df, # Data mínima permitida
-                max_value=max_date_df # Data máxima permitida
-            )
-            data_fim = st.date_input(
-                "Data de Fim", 
-                value=max_date_df, # Valor inicial padrão
-                min_value=min_date_df, # Data mínima permitida
-                max_value=max_date_df # Data máxima permitida
-            )
-            
-            # Lógica para desabilitar o botão se a data de fim for anterior à data de início
-            analisar_button_disabled = False
-            if data_fim < data_inicio:
-                st.warning("⚠️ A Data de Fim não pode ser anterior à Data de Início.")
-                analisar_button_disabled = True
-        
-        # Botão para iniciar a análise, habilitado/desabilitado pela lógica acima
-        if st.button("Analisar", key="btn_analisar", disabled=analisar_button_disabled):
-            # Exibe um spinner enquanto a análise é processada
-            with st.spinner("Preparando e analisando dados..."):
-                # Converte as datas selecionadas para datetime e ajusta para incluir o dia inteiro na data fim
-                start_datetime = pd.to_datetime(data_inicio)
-                # Adiciona 1 dia e subtrai 1 segundo para cobrir até o final do dia selecionado
-                end_datetime = pd.to_datetime(data_fim) + pd.Timedelta(days=1) - pd.Timedelta(seconds=1)
+            with st.container():
+                st.markdown('<div class="content-box">', unsafe_allow_html=True)
+                st.markdown("### 🔍 Filtros de Análise")
                 
-                # Filtra o DataFrame pelo intervalo de datas. Usa .copy() para evitar SettingWithCopyWarning
-                dados_filtrados = st.session_state.df[
-                    (st.session_state.df['Inicio'] >= start_datetime) &
-                    (st.session_state.df['Inicio'] <= end_datetime)
-                ].copy()
+                col1, col2 = st.columns(2)
                 
-                # Aplica o filtro de máquina se uma máquina específica for selecionada
-                if maquina_selecionada != "Todas":
-                    dados_filtrados = dados_filtrados[dados_filtrados['Máquina'] == maquina_selecionada].copy()
+                with col1:
+                    # Filtro de máquina
+                    maquinas_disponiveis = ["Todas"] + sorted(st.session_state.df['Máquina'].unique().tolist())
+                    maquina_selecionada = st.selectbox("Selecione a Máquina:", maquinas_disponiveis)
                 
-                # Verifica se há dados após a filtragem
-                if dados_filtrados.empty:
-                    st.warning("Nenhum dado encontrado para o período e máquina selecionados.")
-                    st.session_state.resultados = None # Limpa resultados anteriores se não houver dados
-                else:
-                    # Chama a função de análise com os dados filtrados e um título descritivo
-                    analisar_dados(
-                        dados_filtrados, 
-                        maquina_selecionada, 
-                        f"Período: {data_inicio.strftime('%d/%m/%Y')} a {data_fim.strftime('%d/%m/%Y')}"
-                    )
-
-        # Fecha a div de estilo (se usada)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # Bloco para exibir os resultados da análise, se existirem
-    # Usar .get() é mais seguro pois retorna None se a chave não existir
-    if st.session_state.get('resultados') is not None:
-        pass # Lógica para exibir resultados iria aqui
+                with col2:
+                    # Filtro de mês
+                    meses_disponiveis = ["Todos"] + sorted(st.session_state.df['Ano-Mês'].unique().tolist())
+                    mes_selecionado = st.selectbox("Selecione o Mês:", meses_disponiveis)
                 
                 # Botão para analisar
                 if st.button("Analisar", key="btn_analisar"):
