@@ -1250,8 +1250,7 @@ def main():
                     dados_filtrados['Dia da Semana'] = dados_filtrados['Inicio'].dt.day_name()
                     
                     # Ordem dos dias da semana
-                    ordem_dias = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-                                        nomes_dias_pt = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
+                    nomes_dias_pt = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo']
                     
                     # Mapeamento para nomes em português
                     mapeamento_dias = dict(zip(ordem_dias, nomes_dias_pt))
