@@ -1,0 +1,189 @@
+/* Main styles */
+body {
+    font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+    color: #2c3e50;
+    background-color: #f8fafc;
+}
+
+/* Title styling */
+.main-title {
+    font-size: 2.2em;
+    font-weight: 700;
+    color: #1e3a8a;
+    margin-bottom: 0.8em;
+    text-align: center;
+    padding-bottom: 0.5em;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.section-title {
+    font-size: 1.5em;
+    font-weight: 600;
+    color: #1e40af;
+    margin-top: 1.5em;
+    margin-bottom: 0.8em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.sidebar-title {
+    font-size: 1.3em;
+    font-weight: 600;
+    color: #1e40af;
+    margin-bottom: 1em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid rgba(49, 51, 63, 0.2);
+}
+
+/* Info box styling */
+.info-box {
+    background-color: #e0f2fe;
+    border-left: 5px solid #0ea5e9;
+    padding: 1em;
+    margin: 1em 0;
+    border-radius: 0.25em;
+    font-size: 0.95em;
+    line-height: 1.5;
+}
+
+/* Metric cards */
+.metric-card {
+    background-color: #f0f9ff;
+    border-radius: 0.5em;
+    padding: 1.2em;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    height: 100%;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    border-top: 3px solid #3b82f6;
+}
+
+.metric-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.metric-card h3 {
+    font-size: 1em;
+    font-weight: 600;
+    color: #64748b;
+    margin-bottom: 0.5em;
+}
+
+.metric-value {
+    font-size: 1.8em;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+}
+
+/* Conclusions box */
+.conclusions-box {
+    background-color: #f8f9fa;
+    border-radius: 0.5em;
+    padding: 1.5em;
+    margin-top: 1em;
+    border-left: 4px solid #0ea5e9;
+}
+
+.conclusions-box h3 {
+    color: #0f172a;
+    font-size: 1.2em;
+    margin-top: 0;
+    margin-bottom: 0.8em;
+}
+
+.conclusions-box ul, .conclusions-box ol {
+    margin-top: 0.8em;
+    margin-bottom: 1.2em;
+    padding-left: 1.5em;
+}
+
+.conclusions-box li {
+    margin-bottom: 0.5em;
+    line-height: 1.5;
+}
+
+/* Styling for filter containers */
+.stSelectbox > div {
+    background-color: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.375em;
+}
+
+/* Styling for buttons */
+.stButton > button {
+    background-color: #3b82f6;
+    color: white;
+    font-weight: 500;
+    border: none;
+    border-radius: 0.375em;
+    padding: 0.5em 1em;
+    transition: background-color 0.2s;
+}
+
+.stButton > button:hover {
+    background-color: #2563eb;
+}
+
+.stDownloadButton > button {
+    background-color: #10b981;
+    color: white;
+    font-weight: 500;
+    border: none;
+    border-radius: 0.375em;
+    padding: 0.5em 1em;
+    transition: background-color 0.2s;
+}
+
+.stDownloadButton > button:hover {
+    background-color: #059669;
+}
+
+/* Tables styling */
+.dataframe {
+    font-size: 0.9em;
+    border-collapse: collapse;
+    width: 100%;
+}
+
+.dataframe th {
+    background-color: #1e40af;
+    color: white;
+    font-weight: 600;
+    text-align: left;
+    padding: 0.75em;
+}
+
+.dataframe td {
+    padding: 0.75em;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.dataframe tr:hover {
+    background-color: #f1f5f9;
+}
+
+/* Animation for metrics */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.metric-card {
+    animation: fadeIn 0.5s ease-out;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .main-title {
+        font-size: 1.8em;
+    }
+    
+    .section-title {
+        font-size: 1.3em;
+    }
+    
+    .metric-value {
+        font-size: 1.5em;
+    }
+}
