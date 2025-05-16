@@ -1,9 +1,0 @@
-streamlit>=1.22.0
-pandas
-numpy
-plotly
-openpyxl
-xlsxwriter
-streamlit-option-menu
-matplotlib
-seaborn
