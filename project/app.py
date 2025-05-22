@@ -657,8 +657,7 @@ class Dashboard:
             return
             
         # Prepara dados para Prophet
-        prophet_data = df.group
-by('data')['caixas_produzidas'].sum().reset_index()
+        prophet_data = df.groupby('data')['caixas_produzidas'].sum().reset_index()
         prophet_data = prophet_data.rename(columns={'data': 'ds', 'caixas_produzidas': 'y'})
         
         # Cria e treina modelo
