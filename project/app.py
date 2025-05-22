@@ -27,7 +27,7 @@ import requests
 import tempfile
 import zipfile
 from typing import Tuple, List, Dict, Optional, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 # Type aliases
@@ -665,7 +665,7 @@ class Dashboard:
         # Outlier detection
         daily_data = df.groupby('data')['caixas_produzidas'].sum()
         q1 = daily_data.quantile(0.25)
-        q3 = daily_data.quantile(0.75)
+        q3 =daily_data.quantile(0.75)
         iqr = q3 - q1
         outliers = daily_data[(daily_data < (q1 - 1.5 * iqr)) | (daily_data > (q3 + 1.5 * iqr))]
         
