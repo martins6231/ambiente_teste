@@ -77,6 +77,7 @@ def t(msg_key, **kwargs):
             "historico": "Histórico",
             "kpi_daily_avg": "Média diária:<br><b style='color:{accent};font-size:1.15em'>{media:.0f}</b>",
             "kpi_records": "Registros: <b>{count}</b>",
+            "reset_filters": "Resetar Filtros",
             # Labels
             "data": "Data",
             "category_lbl": "Categoria",
@@ -86,8 +87,7 @@ def t(msg_key, **kwargs):
             "prod": "Produção",
             "year_lbl": "Ano",
             "accum_boxes": "Caixas Acumuladas",
-            "forecast_boxes": "Previsão Caixas",
-            "reset_filters": "Resetar Filtros",
+            "forecast_boxes": "Previsão Caixas"
         },
         "en": {
             "dashboard_title": "Production Dashboard - Britvic",
@@ -138,6 +138,7 @@ def t(msg_key, **kwargs):
             "historico": "History",
             "kpi_daily_avg": "Daily avg.:<br><b style='color:{accent};font-size:1.15em'>{media:.0f}</b>",
             "kpi_records": "Records: <b>{count}</b>",
+            "reset_filters": "Reset Filters",
             # Labels
             "data": "Date",
             "category_lbl": "Category",
@@ -147,8 +148,7 @@ def t(msg_key, **kwargs):
             "prod": "Production",
             "year_lbl": "Year",
             "accum_boxes": "Accum. Boxes",
-            "forecast_boxes": "Forecasted Boxes",
-            "reset_filters": "Reset Filters",
+            "forecast_boxes": "Forecasted Boxes"
         }
     }
     base = TRANSLATE[idioma].get(msg_key, msg_key)
@@ -595,7 +595,8 @@ def plot_comparativo_ano_mes(df, categoria):
             x=dados_ano['mes_nome'],
             y=dados_ano['caixas_produzidas'],
             name=str(ano),
-            text=dados_ano['caixas_produzidas'],
+            text=dados_ano['caixas_produz
+idas'],
             textposition='auto',
             marker_color=cores[idx % len(cores)]
         ))
