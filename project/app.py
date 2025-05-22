@@ -10,7 +10,7 @@ Features:
 - Data export capabilities
 - Responsive design with customizable filters
 
-Author: Bolt
+Author: Matheus Martins Lopes
 Version: 2.0.0
 """
 
