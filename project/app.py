@@ -33,6 +33,10 @@ from typing import Tuple, List, Dict, Optional, Any, Union
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# Initialize session state
+if "lang" not in st.session_state:
+    st.session_state.lang = "pt"
+
 # Aliases de tipo para melhor legibilidade
 DataFrame = pd.DataFrame
 Figure = go.Figure
@@ -281,7 +285,7 @@ class Dashboard:
     def setup_page(self):
         """Configura as definições e estilo da página"""
         st.set_page_config(
-            page_title=self.translator.get("dashboard_title", "pt"),
+            page_title=self.translator.get("dashboard_title", st.session_state.lang),
             layout="wide",
             page_icon="🧃"
         )
@@ -363,6 +367,21 @@ class Dashboard:
     def setup_sidebar(self):
         """Configura filtros e controles da barra lateral"""
         st.sidebar.markdown("## 🌐 Idioma | Language")
+        
+        # Initialize session state for filters if not already set
+        if "category" not in st.session_state:
+            st.session_state.category = None
+        if "years" not in st.session_state:
+            st.session_state.years = None
+        if "months" not in st.session_state:
+            st.session_state.months = None
+        if "use_date_range" not in st.session_state:
+            st.session_state.use_date_range = False
+        if "start_date" not in st.session_state:
+            st.session_state.start_date = None
+        if "end_date" not in st.session_state:
+            st.session_state.end_date = None
+            
         self.lang = st.sidebar.radio(
             "Escolha o idioma / Choose language:",
             options=list(self.translator.LANGS.keys()),
@@ -379,10 +398,12 @@ class Dashboard:
         
         # Filtros de ano e mês
         st.sidebar.markdown(f'<div class="filter-section"></div>', unsafe_allow_html=True)
+        
+        years = sorted(self.df['data'].dt.year.unique())
         self.years = st.sidebar.multiselect(
             self.translator.get("year", self.lang),
-            options=sorted(self.df['data'].dt.year.unique()),
-            default=sorted(self.df['data'].dt.year.unique()),
+            options=years,
+            default=years,
             key="years"
         )
         
@@ -636,7 +657,8 @@ class Dashboard:
             return
             
         # Prepara dados para Prophet
-        prophet_data = df.groupby('data')['caixas_produzidas'].sum().reset_index()
+        prophet_data = df.group
+by('data')['caixas_produzidas'].sum().reset_index()
         prophet_data = prophet_data.rename(columns={'data': 'ds', 'caixas_produzidas': 'y'})
         
         # Cria e treina modelo
