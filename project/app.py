@@ -1,3 +1,19 @@
+"""
+Britvic Production Dashboard
+---------------------------
+A bilingual (PT/EN) dashboard for visualizing and analyzing production data.
+
+Features:
+- Production trends and forecasting
+- Monthly comparisons and seasonality analysis
+- Automated insights generation
+- Data export capabilities
+- Responsive design with customizable filters
+
+Author: Bolt
+Version: 3.0.0
+"""
+
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -18,14 +34,14 @@ from pathlib import Path
 if "lang" not in st.session_state:
     st.session_state.lang = "pt"
 
-# Aliases de tipo para melhor legibilidade
+# Type aliases for better readability
 DataFrame = pd.DataFrame
 Figure = go.Figure
 DateType = Union[datetime, pd.Timestamp]
 
 @dataclass
 class DashboardConfig:
-    """Configurações e constantes de estilo do dashboard"""
+    """Dashboard configuration and styling constants"""
     PRIMARY_COLOR: str = "#003057"
     ACCENT_COLOR: str = "#27AE60"
     BG_COLOR: str = "#F4FFF6"
@@ -39,7 +55,7 @@ class DashboardConfig:
     CACHE_TTL: int = 3600
 
 class TranslationManager:
-    """Gerenciador de suporte multilíngue para o dashboard"""
+    """Handles multilingual support for the dashboard"""
     
     LANGS = {
         "pt": "Português (Brasil)",
@@ -50,7 +66,7 @@ class TranslationManager:
         self._translations = self._load_translations()
         
     def _load_translations(self) -> Dict[str, Dict[str, str]]:
-        """Carrega todas as traduções do dicionário centralizado"""
+        """Load all translations from a centralized dictionary"""
         return {
             "pt": {
                 "dashboard_title": "Dashboard de Produção - Britvic",
@@ -94,7 +110,7 @@ class TranslationManager:
                 "no_export": "Sem previsão para exportar.",
                 "add_secrets": "Adicione CLOUD_XLSX_URL ao seu .streamlit/secrets.toml e compartilhe a planilha para 'qualquer pessoa com o link'.",
                 "error_download_xls": "Erro ao baixar planilha. Status code: {code}",
-                "not_valid_excel": "Arquivo baixado não é um Excel válido. Confirme se o link é público/correto!",
+                "not_valid_excel": "Arquivo baixado não é um Excel válido.",
                 "excel_open_error": "Erro ao abrir o Excel: {err}",
                 "kpi_year": "📦 Ano {ano}",
                 "kpi_sum": "{qtd:,} caixas",
@@ -187,7 +203,7 @@ class TranslationManager:
         }
         
     def get(self, key: str, lang: str, **kwargs) -> str:
-        """Obtém tradução para uma chave no idioma especificado"""
+        """Get translation for a key in specified language"""
         translation = self._translations[lang].get(key, key)
         if kwargs:
             translation = translation.format(**kwargs)
@@ -206,20 +222,20 @@ def _convert_gsheet_link(url: str) -> str:
 @st.cache_data(ttl=3600)
 def load_data(url: str, config: DashboardConfig) -> Optional[DataFrame]:
     """
-    Carrega e processa dados do arquivo Excel remoto
+    Load and process data from remote Excel file
     
     Args:
-        url: URL do arquivo Excel
-        config: Configurações do dashboard
+        url: Excel file URL
+        config: Dashboard configuration
     
     Returns:
-        DataFrame processado ou None em caso de erro
+        Processed DataFrame or None if error
     """
     try:
         url = _convert_gsheet_link(url)
         response = requests.get(url, timeout=30)
         if response.status_code != 200:
-            st.error(f"Erro ao baixar planilha. Status code: {response.status_code}")
+            st.error(f"Error downloading spreadsheet. Status code: {response.status_code}")
             return None
             
         with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
@@ -231,70 +247,70 @@ def load_data(url: str, config: DashboardConfig) -> Optional[DataFrame]:
                     df = pd.read_excel(tmp.name, engine="openpyxl")
                     return _preprocess_data(df, config)
             except zipfile.BadZipFile:
-                st.error("Arquivo baixado não é um Excel válido.")
+                st.error("Downloaded file is not a valid Excel.")
                 return None
             except Exception as e:
-                st.error(f"Erro ao processar arquivo Excel: {str(e)}")
+                st.error(f"Error processing Excel file: {str(e)}")
                 return None
     except requests.exceptions.RequestException as e:
-        st.error(f"Erro ao fazer download do arquivo: {str(e)}")
+        st.error(f"Error downloading file: {str(e)}")
         return None
     except Exception as e:
-        st.error(f"Erro inesperado: {str(e)}")
+        st.error(f"Unexpected error: {str(e)}")
         return None
 
 def _preprocess_data(df: DataFrame, config: DashboardConfig) -> DataFrame:
     """
-    Pré-processa e limpa os dados
+    Preprocess and clean data
     
     Args:
-        df: DataFrame bruto
-        config: Configurações do dashboard
+        df: Raw DataFrame
+        config: Dashboard configuration
     
     Returns:
-        DataFrame processado
+        Processed DataFrame
     """
-    # Verifica colunas obrigatórias
+    # Check required columns
     missing_cols = [col for col in config.REQUIRED_COLUMNS if col not in df.columns]
     if missing_cols:
-        st.error(f"Colunas obrigatórias ausentes: {', '.join(missing_cols)}")
-        return pd.DataFrame()  # Return empty DataFrame instead of None
+        st.error(f"Missing required columns: {', '.join(missing_cols)}")
+        return pd.DataFrame()
         
-    # Limpa e normaliza nomes das colunas
+    # Clean and normalize column names
     df = df.rename(columns=lambda x: x.strip().lower().replace(" ", "_"))
     
-    # Remove linhas com valores ausentes nas colunas obrigatórias
+    # Remove rows with missing values in required columns
     df = df.dropna(subset=config.REQUIRED_COLUMNS)
     
     try:
-        # Converte coluna de data
+        # Convert date column
         df['data'] = pd.to_datetime(df['data'])
     except Exception as e:
-        st.error(f"Erro ao converter coluna 'data': {str(e)}")
+        st.error(f"Error converting 'data' column: {str(e)}")
         return pd.DataFrame()
         
     try:
-        # Converte e limpa coluna de caixas produzidas
+        # Convert and clean produced boxes column
         df['caixas_produzidas'] = pd.to_numeric(df['caixas_produzidas'], errors='coerce')
         df = df.dropna(subset=['caixas_produzidas'])
         df['caixas_produzidas'] = df['caixas_produzidas'].astype(int)
     except Exception as e:
-        st.error(f"Erro ao processar coluna 'caixas_produzidas': {str(e)}")
+        st.error(f"Error processing 'caixas_produzidas' column: {str(e)}")
         return pd.DataFrame()
         
-    # Remove valores negativos
+    # Remove negative values
     df = df[df['caixas_produzidas'] >= 0]
     
-    # Remove duplicatas
+    # Remove duplicates
     df = df.drop_duplicates(subset=['categoria', 'data'], keep='first')
     
     return df
 
 class Dashboard:
-    """Classe principal do dashboard que orquestra a UI e visualizações"""
+    """Main dashboard class that orchestrates the UI and visualization"""
     
     def __init__(self):
-        """Inicializa o dashboard com configurações e componentes necessários"""
+        """Initialize dashboard with required configurations and components"""
         self.config = DashboardConfig()
         self.translator = TranslationManager()
         self.setup_page()
@@ -303,7 +319,7 @@ class Dashboard:
         self.render_dashboard()
         
     def setup_page(self):
-        """Configura as definições e estilo da página"""
+        """Configure page settings and style"""
         st.set_page_config(
             page_title=self.translator.get("dashboard_title", st.session_state.lang),
             layout="wide",
@@ -312,7 +328,7 @@ class Dashboard:
         self.apply_custom_css()
         
     def apply_custom_css(self):
-        """Aplica estilos CSS customizados"""
+        """Apply custom CSS styling"""
         st.markdown(f"""
             <style>
                 .stApp {{
@@ -373,7 +389,7 @@ class Dashboard:
         """, unsafe_allow_html=True)
         
     def load_data(self):
-        """Carrega e prepara os dados"""
+        """Load and prepare data"""
         if "CLOUD_XLSX_URL" not in st.secrets:
             st.error(self.translator.get("add_secrets", st.session_state.lang))
             st.stop()
@@ -381,27 +397,14 @@ class Dashboard:
         with st.spinner(self.translator.get("loading_data", st.session_state.lang)):
             self.df = load_data(st.secrets["CLOUD_XLSX_URL"], self.config)
             
-        if self.df is None:
+        if self.df is None or self.df.empty:
             st.stop()
             
     def setup_sidebar(self):
-        """Configura filtros e controles da barra lateral"""
+        """Configure sidebar filters and controls"""
         st.sidebar.markdown("## 🌐 Idioma | Language")
         
-        # Initialize session state for filters if not already set
-        if "category" not in st.session_state:
-            st.session_state.category = None
-        if "years" not in st.session_state:
-            st.session_state.years = None
-        if "months" not in st.session_state:
-            st.session_state.months = None
-        if "use_date_range" not in st.session_state:
-            st.session_state.use_date_range = False
-        if "start_date" not in st.session_state:
-            st.session_state.start_date = None
-        if "end_date" not in st.session_state:
-            st.session_state.end_date = None
-            
+        # Language selector
         self.lang = st.sidebar.radio(
             "Escolha o idioma / Choose language:",
             options=list(self.translator.LANGS.keys()),
@@ -409,14 +412,14 @@ class Dashboard:
             key="lang"
         )
         
-        # Filtro de categoria
+        # Category filter
         self.category = st.sidebar.selectbox(
             self.translator.get("category", self.lang),
             options=sorted(self.df['categoria'].unique()),
             key="category"
         )
         
-        # Filtros de ano e mês
+        # Year and month filters
         st.sidebar.markdown(f'<div class="filter-section"></div>', unsafe_allow_html=True)
         
         years = sorted(self.df['data'].dt.year.unique())
@@ -439,7 +442,7 @@ class Dashboard:
             key="months"
         )
         
-        # Filtro de intervalo de datas
+        # Date range filter
         st.sidebar.markdown(f'<div class="filter-section"></div>', unsafe_allow_html=True)
         st.sidebar.markdown(f'### {self.translator.get("date_range", self.lang)}')
         self.use_date_range = st.sidebar.checkbox(
@@ -467,23 +470,23 @@ class Dashboard:
                 key="end_date"
             )
             
-        # Botão para resetar filtros
+        # Reset filters button
         if st.sidebar.button(self.translator.get("reset_filters", self.lang)):
             st.session_state.clear()
             st.experimental_rerun()
             
     def render_dashboard(self):
-        """Renderiza o conteúdo principal do dashboard"""
+        """Render main dashboard content"""
         self.render_header()
         self.render_filters_summary()
         
-        # Filtra dados baseado nas seleções
+        # Filter data based on selections
         filtered_df = self.filter_data()
         if filtered_df.empty:
             st.error(self.translator.get("empty_data_for_period", self.lang))
             return
             
-        # Renderiza visualizações
+        # Render visualizations
         self.render_kpis(filtered_df)
         self.render_trends(filtered_df)
         self.render_monthly_analysis(filtered_df)
@@ -492,7 +495,7 @@ class Dashboard:
         self.render_export_section(filtered_df)
         
     def render_header(self):
-        """Renderiza o cabeçalho do dashboard com logo"""
+        """Render dashboard header with logo"""
         st.markdown(f"""
             <div style="
                 display: flex;
@@ -523,7 +526,7 @@ class Dashboard:
         """, unsafe_allow_html=True)
         
     def render_filters_summary(self):
-        """Exibe resumo dos filtros ativos"""
+        """Display active filters summary"""
         st.markdown(
             f"<h3 style='color:{self.config.ACCENT_COLOR}; text-align:left;'>"
             f"{self.translator.get('analysis_for', self.lang, cat=self.category)}</h3>",
@@ -540,7 +543,7 @@ class Dashboard:
             )
             
     def filter_data(self) -> DataFrame:
-        """Aplica filtros aos dados"""
+        """Apply filters to data"""
         if self.use_date_range:
             mask = (
                 (self.df['categoria'] == self.category) &
@@ -557,7 +560,7 @@ class Dashboard:
         return self.df[mask].copy()
         
     def render_kpis(self, df: DataFrame):
-        """Renderiza métricas KPI"""
+        """Render KPI metrics"""
         df_grouped = df.groupby(df['data'].dt.year).agg({
             'caixas_produzidas': ['sum', 'mean', 'std', 'count']
         }).reset_index()
@@ -567,7 +570,7 @@ class Dashboard:
         """
         
         for _, row in df_grouped.iterrows():
-            year = int(row['data'].iloc[0])  # Fixed FutureWarning
+            year = int(row['data'].iloc[0])
             kpi_html += f"""
             <div style="
                 background: #e8f8ee;
@@ -597,7 +600,7 @@ class Dashboard:
         st.markdown(kpi_html, unsafe_allow_html=True)
         
     def render_trends(self, df: DataFrame):
-        """Renderiza visualizações de tendência"""
+        """Render trend visualizations"""
         daily_data = df.groupby('data')['caixas_produzidas'].sum().reset_index()
         fig = px.bar(
             daily_data,
@@ -620,14 +623,14 @@ class Dashboard:
         st.plotly_chart(fig, use_container_width=True)
         
     def render_monthly_analysis(self, df: DataFrame):
-        """Renderiza gráficos de análise mensal"""
+        """Render monthly analysis charts"""
         monthly_data = df.groupby(df['data'].dt.to_period('M')).agg({
             'caixas_produzidas': 'sum'
         }).reset_index()
         monthly_data['mes'] = monthly_data['data'].dt.strftime('%b/%Y')
         monthly_data['var_%'] = monthly_data['caixas_produzidas'].pct_change() * 100
         
-        # Totais mensais
+        # Monthly totals
         fig1 = px.bar(
             monthly_data,
             x='mes',
@@ -647,7 +650,7 @@ class Dashboard:
         )
         st.plotly_chart(fig1, use_container_width=True)
         
-        # Variação mensal
+        # Monthly variation
         fig2 = px.line(
             monthly_data,
             x='mes',
@@ -671,27 +674,27 @@ class Dashboard:
         st.plotly_chart(fig2, use_container_width=True)
         
     def render_forecast(self, df: DataFrame):
-        """Renderiza visualização de previsão"""
+        """Render forecast visualization"""
         if df.shape[0] < 2:
             st.info(self.translator.get("no_forecast", self.lang))
             return
             
-        # Prepara dados para Prophet
+        # Prepare data for Prophet
         prophet_data = df.groupby('data')['caixas_produzidas'].sum().reset_index()
         prophet_data = prophet_data.rename(columns={'data': 'ds', 'caixas_produzidas': 'y'})
         
-        # Cria e treina modelo
+        # Create and fit model
         model = Prophet(yearly_seasonality=True, daily_seasonality=False)
         model.fit(prophet_data)
         
-        # Faz previsão
+        # Make forecast
         future = model.make_future_dataframe(periods=self.config.FORECAST_DAYS)
         forecast = model.predict(future)
         
-        # Plota previsão
+        # Plot forecast
         fig = go.Figure()
         
-        # Dados históricos
+        # Historical data
         fig.add_trace(go.Scatter(
             x=prophet_data['ds'],
             y=prophet_data['y'],
@@ -701,7 +704,7 @@ class Dashboard:
             marker=dict(color=self.config.ACCENT_COLOR)
         ))
         
-        # Previsão
+        # Forecast
         fig.add_trace(go.Scatter(
             x=forecast['ds'],
             y=forecast['yhat'],
@@ -710,7 +713,7 @@ class Dashboard:
             line=dict(color=self.config.ACCENT_COLOR, width=2)
         ))
         
-        # Intervalos de confiança
+        # Confidence intervals
         fig.add_trace(go.Scatter(
             x=forecast['ds'],
             y=forecast['yhat_upper'],
@@ -740,10 +743,10 @@ class Dashboard:
         st.plotly_chart(fig, use_container_width=True)
         
     def render_insights(self, df: DataFrame):
-        """Gera e exibe insights automatizados"""
+        """Generate and display automated insights"""
         insights = []
         
-        # Análise de tendência mensal
+        # Monthly trend analysis
         monthly_data = df.groupby(df['data'].dt.to_period('M'))['caixas_produzidas'].sum()
         if len(monthly_data) > 6:
             recent_months = 3
@@ -755,7 +758,7 @@ class Dashboard:
             elif recent_avg < previous_avg * (1 - self.config.TREND_THRESHOLD):
                 insights.append(self.translator.get("recent_fall", self.lang))
                 
-        # Detecção de outliers
+        # Outlier detection
         daily_data = df.groupby('data')['caixas_produzidas'].sum()
         q1 = daily_data.quantile(0.25)
         q3 = daily_data.quantile(0.75)
@@ -768,7 +771,7 @@ class Dashboard:
         if not outliers.empty:
             insights.append(self.translator.get("outlier_days", self.lang, num=len(outliers)))
             
-        # Análise de variabilidade
+        # Variability analysis
         if daily_data.std() / daily_data.mean() > 0.5:
             insights.append(self.translator.get("high_var", self.lang))
             
@@ -780,10 +783,10 @@ class Dashboard:
                 st.success(self.translator.get("no_pattern", self.lang))
                 
     def render_export_section(self, df: DataFrame):
-        """Renderiza funcionalidade de exportação"""
+        """Render export functionality"""
         with st.expander(self.translator.get("export", self.lang)):
             if st.button(self.translator.get("export_with_fc", self.lang)):
-                # Prepara dados de previsão
+                # Prepare forecast data
                 prophet_data = df.groupby('data')['caixas_produzidas'].sum().reset_index()
                 prophet_data = prophet_data.rename(columns={'data': 'ds', 'caixas_produzidas': 'y'})
                 
@@ -793,7 +796,7 @@ class Dashboard:
                 future = model.make_future_dataframe(periods=self.config.FORECAST_DAYS)
                 forecast = model.predict(future)
                 
-                # Prepara dados para exportação
+                # Prepare export data
                 export_data = prophet_data.merge(
                     forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']],
                     on='ds',
@@ -807,14 +810,14 @@ class Dashboard:
                     'yhat_upper': 'previsao_max'
                 })
                 
-                # Cria arquivo Excel
+                # Create Excel file
                 buffer = io.BytesIO()
                 with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
                     export_data.to_excel(writer, index=False, sheet_name='Dados')
                     
                 buffer.seek(0)
                 
-                # Botão de download
+                # Download button
                 st.download_button(
                     label=self.translator.get("download_file", self.lang),
                     data=buffer,
