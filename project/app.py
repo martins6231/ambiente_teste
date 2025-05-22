@@ -341,7 +341,7 @@ def gerar_dataset_modelo(df, categoria=None):
 categorias = selecionar_categoria(df)
 anos_disp = sorted(df['data'].dt.year.drop_duplicates())
 meses_disp = sorted(df['data'].dt.month.drop_duplicates())
-meses_nome = [f"{m:02d} - {calendar.month_name[m] if idioma == 'en' else calendar.month_name[m][:3]}" for m in meses_disp]
+meses_nome = [f"{m:02d} - {calendar.month_name[m][:3] if idioma == 'en' else calendar.month_abbr[m]}" for m in meses_disp]
 map_mes = dict(zip(meses_nome, meses_disp))
 
 data_min = df['data'].min()
