@@ -1,22 +1,3 @@
-"""
-Britvic Production Dashboard
----------------------------
-Dashboard bilíngue (PT/BR/EN) para visualização e análise de dados de produção.
-
-Features:
-- Análise de tendências e previsões de produção
-- Comparações mensais e análise de sazonalidade
-- Geração automática de insights
-- Exportação de dados
-- Design responsivo com filtros customizáveis
-- Suporte completo a múltiplos idiomas
-- KPIs dinâmicos e interativos
-- Sistema avançado de filtragem temporal
-
-Autor: Bolt
-Versão: 3.0.0
-"""
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -212,6 +193,16 @@ class TranslationManager:
             translation = translation.format(**kwargs)
         return translation
 
+def _convert_gsheet_link(url: str) -> str:
+    """Convert Google Sheets link to direct download URL"""
+    if "docs.google.com/spreadsheets" in url:
+        import re
+        match = re.search(r'/d/([a-zA-Z0-9-_]+)', url)
+        if match:
+            sheet_id = match.group(1)
+            return f'https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx'
+    return url
+
 @st.cache_data(ttl=3600)
 def load_data(url: str, config: DashboardConfig) -> Optional[DataFrame]:
     """
@@ -225,7 +216,8 @@ def load_data(url: str, config: DashboardConfig) -> Optional[DataFrame]:
         DataFrame processado ou None em caso de erro
     """
     try:
-        response = requests.get(url)
+        url = _convert_gsheet_link(url)
+        response = requests.get(url, timeout=30)
         if response.status_code != 200:
             st.error(f"Erro ao baixar planilha. Status code: {response.status_code}")
             return None
@@ -234,23 +226,22 @@ def load_data(url: str, config: DashboardConfig) -> Optional[DataFrame]:
             tmp.write(response.content)
             tmp.flush()
             
-            if not _is_valid_excel(tmp.name):
+            try:
+                with zipfile.ZipFile(tmp.name, 'r'):
+                    df = pd.read_excel(tmp.name, engine="openpyxl")
+                    return _preprocess_data(df, config)
+            except zipfile.BadZipFile:
                 st.error("Arquivo baixado não é um Excel válido.")
                 return None
-                
-            df = pd.read_excel(tmp.name, engine="openpyxl")
-            return _preprocess_data(df, config)
-    except Exception as e:
-        st.error(f"Erro ao carregar dados: {str(e)}")
+            except Exception as e:
+                st.error(f"Erro ao processar arquivo Excel: {str(e)}")
+                return None
+    except requests.exceptions.RequestException as e:
+        st.error(f"Erro ao fazer download do arquivo: {str(e)}")
         return None
-
-def _is_valid_excel(file_path: str) -> bool:
-    """Verifica se o arquivo é um Excel válido"""
-    try:
-        with zipfile.ZipFile(file_path):
-            return True
-    except (zipfile.BadZipFile, Exception):
-        return False
+    except Exception as e:
+        st.error(f"Erro inesperado: {str(e)}")
+        return None
 
 def _preprocess_data(df: DataFrame, config: DashboardConfig) -> DataFrame:
     """
@@ -263,12 +254,41 @@ def _preprocess_data(df: DataFrame, config: DashboardConfig) -> DataFrame:
     Returns:
         DataFrame processado
     """
+    # Verifica colunas obrigatórias
+    missing_cols = [col for col in config.REQUIRED_COLUMNS if col not in df.columns]
+    if missing_cols:
+        st.error(f"Colunas obrigatórias ausentes: {', '.join(missing_cols)}")
+        return pd.DataFrame()  # Return empty DataFrame instead of None
+        
+    # Limpa e normaliza nomes das colunas
     df = df.rename(columns=lambda x: x.strip().lower().replace(" ", "_"))
+    
+    # Remove linhas com valores ausentes nas colunas obrigatórias
     df = df.dropna(subset=config.REQUIRED_COLUMNS)
-    df['data'] = pd.to_datetime(df['data'])
-    df['caixas_produzidas'] = pd.to_numeric(df['caixas_produzidas'], errors='coerce').fillna(0).astype(int)
+    
+    try:
+        # Converte coluna de data
+        df['data'] = pd.to_datetime(df['data'])
+    except Exception as e:
+        st.error(f"Erro ao converter coluna 'data': {str(e)}")
+        return pd.DataFrame()
+        
+    try:
+        # Converte e limpa coluna de caixas produzidas
+        df['caixas_produzidas'] = pd.to_numeric(df['caixas_produzidas'], errors='coerce')
+        df = df.dropna(subset=['caixas_produzidas'])
+        df['caixas_produzidas'] = df['caixas_produzidas'].astype(int)
+    except Exception as e:
+        st.error(f"Erro ao processar coluna 'caixas_produzidas': {str(e)}")
+        return pd.DataFrame()
+        
+    # Remove valores negativos
     df = df[df['caixas_produzidas'] >= 0]
-    return df.drop_duplicates(subset=['categoria', 'data'], keep='first')
+    
+    # Remove duplicatas
+    df = df.drop_duplicates(subset=['categoria', 'data'], keep='first')
+    
+    return df
 
 class Dashboard:
     """Classe principal do dashboard que orquestra a UI e visualizações"""
@@ -738,7 +758,7 @@ class Dashboard:
         # Detecção de outliers
         daily_data = df.groupby('data')['caixas_produzidas'].sum()
         q1 = daily_data.quantile(0.25)
-        q3 = daily_data.quantile(0.75)  # Fixed spacing
+        q3 = daily_data.quantile(0.75)
         iqr = q3 - q1
         outliers = daily_data[
             (daily_data < (q1 - self.config.OUTLIER_THRESHOLD * iqr)) |
