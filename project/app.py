@@ -1,19 +1,3 @@
-"""
-Britvic Production Dashboard
----------------------------
-A bilingual (PT/EN) dashboard for visualizing and analyzing production data.
-
-Features:
-- Production trends and forecasting
-- Monthly comparisons and seasonality analysis
-- Automated insights generation
-- Data export capabilities
-- Responsive design with customizable filters
-
-Author: Bolt
-Version: 3.0.0
-"""
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -562,7 +546,7 @@ class Dashboard:
     def render_kpis(self, df: DataFrame):
         """Render KPI metrics"""
         df_grouped = df.groupby(df['data'].dt.year).agg({
-            'caixas_produzidas': ['sum', 'mean', 'std', 'count']
+            'caixas_produzidas': ['sum', 'mean', 'count']
         }).reset_index()
         
         kpi_html = """
@@ -571,6 +555,10 @@ class Dashboard:
         
         for _, row in df_grouped.iterrows():
             year = int(row['data'].iloc[0])
+            total_boxes = int(row['caixas_produzidas']['sum'])
+            daily_avg = row['caixas_produzidas']['mean']
+            record_count = int(row['caixas_produzidas']['count'])
+            
             kpi_html += f"""
             <div style="
                 background: #e8f8ee;
@@ -585,13 +573,13 @@ class Dashboard:
                     {self.translator.get("kpi_year", self.lang, ano=year)}
                 </div>
                 <div style="color: {self.config.ACCENT_COLOR}; font-size:2.1em; font-weight:bold; margin-bottom:7px;">
-                    {self.translator.get("kpi_sum", self.lang, qtd=int(row['caixas_produzidas']['sum']))}
+                    {self.translator.get("kpi_sum", self.lang, qtd=total_boxes)}
                 </div>
                 <div style="font-size: 1.08em; color: {self.config.PRIMARY_COLOR}; margin-bottom:2px;">
-                    {self.translator.get('kpi_daily_avg', self.lang, media=row['caixas_produzidas']['mean'], accent=self.config.ACCENT_COLOR)}
+                    {self.translator.get('kpi_daily_avg', self.lang, media=daily_avg, accent=self.config.ACCENT_COLOR)}
                 </div>
                 <div style="font-size: 1em; color: #666;">
-                    {self.translator.get('kpi_records', self.lang, count=row['caixas_produzidas']['count'])}
+                    {self.translator.get('kpi_records', self.lang, count=record_count)}
                 </div>
             </div>
             """
