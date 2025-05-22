@@ -1,19 +1,3 @@
-"""
-Britvic Production Dashboard
----------------------------
-A bilingual (PT/EN) dashboard for visualizing and analyzing production data.
-
-Features:
-- Production trends and forecasting
-- Monthly comparisons and seasonality analysis
-- Automated insights generation
-- Data export capabilities
-- Responsive design with customizable filters
-
-Author: Matheus Martins Lopes
-Version: 2.0.0
-"""
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -473,7 +457,7 @@ class Dashboard:
         """
         
         for _, row in df_grouped.iterrows():
-            year = int(row['data'])
+            year = int(row['data'].iloc[0])  # Fixed FutureWarning
             kpi_html += f"""
             <div style="
                 background: #e8f8ee;
@@ -665,7 +649,7 @@ class Dashboard:
         # Outlier detection
         daily_data = df.groupby('data')['caixas_produzidas'].sum()
         q1 = daily_data.quantile(0.25)
-        q3 =daily_data.quantile(0.75)
+        q3 = daily_data.quantile(0.75)  # Fixed spacing
         iqr = q3 - q1
         outliers = daily_data[(daily_data < (q1 - 1.5 * iqr)) | (daily_data > (q3 + 1.5 * iqr))]
         
