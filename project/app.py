@@ -595,8 +595,7 @@ def plot_comparativo_ano_mes(df, categoria):
             x=dados_ano['mes_nome'],
             y=dados_ano['caixas_produzidas'],
             name=str(ano),
-            text=dados_ano['caixas_produz
-idas'],
+            text=dados_ano['caixas_produzidas'],
             textposition='auto',
             marker_color=cores[idx % len(cores)]
         ))
