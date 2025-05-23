@@ -219,120 +219,53 @@ st.markdown(f"""
             color: {BRITVIC_PRIMARY};
         }}
         /* Estilo para o menu de navegação */
+        .nav-section {{
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px solid #e0e0e0;
+        }}
+        .nav-title {{
+            font-weight: bold;
+            color: {BRITVIC_PRIMARY};
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }}
+        .section-header {{
+            padding-top: 20px;
+            margin-top: 40px;
+            border-top: 1px solid #e0e0e0;
+        }}
         .nav-button {{
-            background-color: transparent;
-            border: 1px solid {BRITVIC_PRIMARY};
+            background-color: #f0f0f0;
+            border: none;
             color: {BRITVIC_PRIMARY};
             padding: 8px 12px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
+            text-align: left;
+            width: 100%;
             font-size: 14px;
-            margin: 4px 2px;
+            margin: 4px 0;
             cursor: pointer;
             border-radius: 4px;
             transition: all 0.3s;
         }}
         .nav-button:hover {{
+            background-color: #e0e0e0;
+        }}
+        .nav-button-active {{
             background-color: {BRITVIC_PRIMARY};
             color: white;
-        }}
-        .section-header {{
-            padding-top: 70px;
-            margin-top: -70px;
         }}
     </style>
 """, unsafe_allow_html=True)
 
-# JavaScript para navegação suave
-st.markdown("""
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Função para rolar suavemente para uma âncora
-    function scrollToAnchor(anchorId) {
-        const element = document.getElementById(anchorId);
-        if (element) {
-            element.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-    }
-    
-    // Observar mudanças no DOM para detectar novos botões
-    const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-            if (mutation.addedNodes) {
-                mutation.addedNodes.forEach(function(node) {
-                    if (node.nodeType === 1 && node.matches('button[data-anchor]')) {
-                        node.addEventListener('click', function() {
-                            scrollToAnchor(this.getAttribute('data-anchor'));
-                        });
-                    }
-                });
-            }
-        });
-    });
-    
-    // Configurar o observador
-    observer.observe(document.body, { childList: true, subtree: true });
-});
-</script>
-""", unsafe_allow_html=True)
-
 # ----------- Painel de Navegação -----------
-def create_nav_menu():
-    nav_sections = {
-        "overview": {"icon": "📊", "label": {"pt": "Visão Geral", "en": "Overview"}},
-        "daily_trend": {"icon": "📈", "label": {"pt": "Tendência Diária", "en": "Daily Trend"}},
-        "monthly_analysis": {"icon": "📅", "label": {"pt": "Análise Mensal", "en": "Monthly Analysis"}},
-        "yearly_comparison": {"icon": "🗓️", "label": {"pt": "Comparativo Anual", "en": "Yearly Comparison"}},
-        "forecast": {"icon": "🔮", "label": {"pt": "Previsão", "en": "Forecast"}},
-        "insights": {"icon": "💡", "label": {"pt": "Insights", "en": "Insights"}},
-        "export": {"icon": "📤", "label": {"pt": "Exportação", "en": "Export"}}
-    }
-    
-    st.sidebar.markdown(f"""
-    <div style="
-        margin-top: 30px;
-        padding-top: 15px;
-        border-top: 1px solid #e0e0e0;
-        font-weight: bold;
-        color: {BRITVIC_PRIMARY};
-        font-size: 1.1em;
-    ">
-        {t("nav_title")}
-    </div>
-    """, unsafe_allow_html=True)
-    
-    for section_id, section_info in nav_sections.items():
-        if st.sidebar.button(
-            f"{section_info['icon']} {section_info['label'][idioma]}",
-            key=f"nav_{section_id}",
-            use_container_width=True,
-            help=f"Ir para {section_info['label'][idioma]}"
-        ):
-            st.session_state["active_section"] = section_id
-            st.rerun()
-
 # Inicializar o estado da seção ativa
 if "active_section" not in st.session_state:
     st.session_state["active_section"] = "overview"
 
-# Função para rolar para a seção ativa
-def scroll_to_section():
-    if "active_section" in st.session_state:
-        section = st.session_state["active_section"]
-        st.markdown(f"""
-        <script>
-            document.addEventListener('DOMContentLoaded', function() {{
-                const element = document.getElementById('{section}');
-                if (element) {{
-                    element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
-                }}
-            }});
-        </script>
-        """, unsafe_allow_html=True)
-
-# Chamar a função de rolagem
-scroll_to_section()
+def nav_to(section):
+    st.session_state["active_section"] = section
+    st.experimental_rerun()
 
 # ----------- Topo/logomarca ------------
 st.markdown(f"""
@@ -549,8 +482,29 @@ with st.sidebar:
         )
     st.markdown('</div>', unsafe_allow_html=True)
     
-    # Adicionar o menu de navegação na sidebar
-    create_nav_menu()
+    # Menu de navegação - Nova implementação com botões nativos do Streamlit
+    st.markdown(f'<div class="nav-section"><div class="nav-title">{t("nav_title")}</div></div>', unsafe_allow_html=True)
+    
+    # Definir seções de navegação
+    nav_sections = {
+        "overview": {"icon": "📊", "label": t("section_overview")},
+        "daily_trend": {"icon": "📈", "label": t("section_daily_trend")},
+        "monthly_analysis": {"icon": "📅", "label": t("section_monthly_analysis")},
+        "yearly_comparison": {"icon": "🗓️", "label": t("section_yearly_comparison")},
+        "forecast": {"icon": "🔮", "label": t("section_forecast")},
+        "insights": {"icon": "💡", "label": t("section_insights")},
+        "export": {"icon": "📤", "label": t("section_export")}
+    }
+    
+    # Criar botões de navegação
+    for section_id, section_info in nav_sections.items():
+        if st.button(
+            f"{section_info['icon']} {section_info['label']}",
+            key=f"nav_{section_id}",
+            use_container_width=True,
+            help=f"Ir para {section_info['label']}"
+        ):
+            nav_to(section_id)
     
     # Botão para resetar filtros
     st.markdown(f'<div class="filter-section"></div>', unsafe_allow_html=True)
@@ -842,12 +796,7 @@ def exportar_consolidado(df, previsao, categoria):
 # Função para criar âncoras e títulos de seção
 def section_header(section_id, title, icon="📊"):
     st.markdown(f"""
-    <div id="{section_id}" class="section-header" style="
-        margin-top: 40px;
-        margin-bottom: 20px;
-        padding-top: 20px;
-        border-top: 1px solid #e0e0e0;
-    ">
+    <div id="{section_id}" class="section-header">
         <h2 style="color:{BRITVIC_PRIMARY};">{icon} {title}</h2>
     </div>
     """, unsafe_allow_html=True)
@@ -896,3 +845,28 @@ with st.expander(t("export")):
             file_name=nome_arq,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
+# Adicionar um scroll automático para a seção ativa quando a página carregar
+if st.session_state["active_section"] != "overview":
+    active_section = st.session_state["active_section"]
+    st.markdown(f"""
+    <script>
+        // Função para executar após o carregamento da página
+        function scrollToSection() {{
+            const element = document.getElementById('{active_section}');
+            if (element) {{
+                // Usar setTimeout para garantir que o DOM esteja completamente carregado
+                setTimeout(() => {{
+                    element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+                }}, 100);
+            }}
+        }}
+        
+        // Executar quando o DOM estiver carregado
+        if (document.readyState === 'loading') {{
+            document.addEventListener('DOMContentLoaded', scrollToSection);
+        }} else {{
+            scrollToSection();
+        }}
+    </script>
+    """, unsafe_allow_html=True)
