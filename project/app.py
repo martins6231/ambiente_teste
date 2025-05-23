@@ -265,7 +265,7 @@ if "active_section" not in st.session_state:
 
 def nav_to(section):
     st.session_state["active_section"] = section
-    st.experimental_rerun()
+    st.rerun()  # Versão correta em Streamlit mais recente
 
 # ----------- Topo/logomarca ------------
 st.markdown(f"""
@@ -620,7 +620,8 @@ def plot_tendencia(df, categoria):
 
 def plot_variacao_mensal(df, categoria):
     agrup = dataset_ano_mes(df, categoria)
-    mensal = agrup.groupby([agrup['data'].dt.to_period('M')])['caixas_produzidas'].sum().reset_index()
+    # Corrigido para evitar o aviso do pandas
+    mensal = agrup.groupby(agrup['data'].dt.to_period('M'))['caixas_produzidas'].sum().reset_index()
     mensal['mes'] = mensal['data'].dt.strftime('%b/%Y')
     mensal['var_%'] = mensal['caixas_produzidas'].pct_change() * 100
     fig1 = px.bar(
@@ -645,8 +646,10 @@ def plot_sazonalidade(df, categoria):
     if agrup.empty:
         st.info(t("no_trend"))
         return
+    # Convertendo ano para string para evitar o aviso do pandas
+    agrup['ano_str'] = agrup['ano'].astype(str)
     fig = px.box(
-        agrup, x='mes', y='caixas_produzidas', color=agrup['ano'].astype(str),
+        agrup, x='mes', y='caixas_produzidas', color='ano_str',
         points='all', notched=True,
         title=t("monthly_seasonal", cat=categoria),
         labels={'mes': t("month_lbl"), "caixas_produzidas":t("prod")},
@@ -667,7 +670,8 @@ def plot_sazonalidade(df, categoria):
 
 def plot_comparativo_ano_mes(df, categoria):
     agrup = dataset_ano_mes(df, categoria)
-    tab = agrup.groupby(['ano','mes'])['caixas_produzidas'].sum().reset_index()
+    # Usando tuplas para groupby para evitar o aviso do pandas
+    tab = agrup.groupby(['ano', 'mes'])['caixas_produzidas'].sum().reset_index()
     tab['mes_nome'] = tab['mes'].apply(nome_mes)
     tab = tab.sort_values(['mes'])
     fig = go.Figure()
@@ -698,12 +702,15 @@ def plot_comparativo_ano_mes(df, categoria):
 
 def plot_comparativo_acumulado(df, categoria):
     agrup = dataset_ano_mes(df, categoria)
-    res = agrup.groupby(['ano','mes'])['caixas_produzidas'].sum().reset_index()
+    # Usando tuplas para groupby para evitar o aviso do pandas
+    res = agrup.groupby(['ano', 'mes'])['caixas_produzidas'].sum().reset_index()
     res['acumulado'] = res.groupby('ano')['caixas_produzidas'].cumsum()
+    # Convertendo ano para string para evitar o aviso do pandas
+    res['ano_str'] = res['ano'].astype(str)
     fig = px.line(
-        res, x='mes', y='acumulado', color=res['ano'].astype(str),
+        res, x='mes', y='acumulado', color='ano_str',
         markers=True,
-        labels={'mes': t("month_lbl"), 'acumulado':t("accum_boxes"), 'ano':t("year_lbl")},
+        labels={'mes': t("month_lbl"), 'acumulado':t("accum_boxes"), 'ano_str':t("year_lbl")},
         title=t("monthly_accum", cat=categoria),
         color_discrete_sequence=px.colors.sequential.Teal[::-1]
     )
@@ -759,13 +766,14 @@ def gerar_insights(df, categoria):
     grupo = gerar_dataset_modelo(df, categoria)
     tendencias = []
     mensal = grupo.copy()
+    # Corrigido para evitar o aviso do pandas
     mensal['mes'] = mensal['data'].dt.to_period('M')
     agg = mensal.groupby('mes')['caixas_produzidas'].sum()
     if len(agg) > 6:
         ultimos = min(3, len(agg))
-        if agg[-ultimos:].mean() > agg[:-ultimos].mean():
+        if agg.iloc[-ultimos:].mean() > agg.iloc[:-ultimos].mean():
             tendencias.append(t("recent_growth"))
-        elif agg[-ultimos:].mean() < agg[:-ultimos].mean():
+        elif agg.iloc[-ultimos:].mean() < agg.iloc[:-ultimos].mean():
             tendencias.append(t("recent_fall"))
     q1 = grupo['caixas_produzidas'].quantile(0.25)
     q3 = grupo['caixas_produzidas'].quantile(0.75)
@@ -785,7 +793,7 @@ def gerar_insights(df, categoria):
 def exportar_consolidado(df, previsao, categoria):
     if previsao.empty:
         st.warning(t("no_export"))
-        return
+        return pd.DataFrame(), ""
     dados = gerar_dataset_modelo(df, categoria)
     previsao_col = previsao[['ds', 'yhat']].rename(columns={'ds':'data', 'yhat':'previsao_caixas'})
     base_export = dados.merge(previsao_col, left_on='data', right_on='data', how='outer').sort_values("data")
@@ -836,15 +844,16 @@ section_header("export", t("section_export"), "📤")
 with st.expander(t("export")):
     if st.button(t("export_with_fc"), help=t("export_with_fc")):
         base_export, nome_arq = exportar_consolidado(df_filtrado, previsao, st.session_state["filtros"]["categoria"])
-        buffer = io.BytesIO()
-        base_export.to_excel(buffer, index=False, engine='openpyxl')
-        buffer.seek(0)
-        st.download_button(
-            label=t("download_file"),
-            data=buffer,
-            file_name=nome_arq,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+        if not base_export.empty:
+            buffer = io.BytesIO()
+            base_export.to_excel(buffer, index=False, engine='openpyxl')
+            buffer.seek(0)
+            st.download_button(
+                label=t("download_file"),
+                data=buffer,
+                file_name=nome_arq,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 
 # Adicionar um scroll automático para a seção ativa quando a página carregar
 if st.session_state["active_section"] != "overview":
