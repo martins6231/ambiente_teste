@@ -87,7 +87,17 @@ def t(msg_key, **kwargs):
             "prod": "Produção",
             "year_lbl": "Ano",
             "accum_boxes": "Caixas Acumuladas",
-            "forecast_boxes": "Previsão Caixas"
+            "forecast_boxes": "Previsão Caixas",
+            # Navigation
+            "nav_title": "Navegação",
+            "nav_kpis": "📊 KPIs",
+            "nav_daily": "📈 Tendência Diária",
+            "nav_monthly": "📅 Análise Mensal",
+            "nav_seasonal": "🔄 Sazonalidade",
+            "nav_yearly": "📊 Comparativo Anual",
+            "nav_forecast": "🔮 Previsões",
+            "nav_insights": "💡 Insights",
+            "nav_export": "📤 Exportar"
         },
         "en": {
             "dashboard_title": "Production Dashboard - Britvic",
@@ -148,7 +158,17 @@ def t(msg_key, **kwargs):
             "prod": "Production",
             "year_lbl": "Year",
             "accum_boxes": "Accum. Boxes",
-            "forecast_boxes": "Forecasted Boxes"
+            "forecast_boxes": "Forecasted Boxes",
+            # Navigation
+            "nav_title": "Navigation",
+            "nav_kpis": "📊 KPIs",
+            "nav_daily": "📈 Daily Trend",
+            "nav_monthly": "📅 Monthly Analysis",
+            "nav_seasonal": "🔄 Seasonality",
+            "nav_yearly": "📊 Yearly Comparison",
+            "nav_forecast": "🔮 Forecasts",
+            "nav_insights": "💡 Insights",
+            "nav_export": "📤 Export"
         }
     }
     base = TRANSLATE[idioma].get(msg_key, msg_key)
@@ -198,7 +218,51 @@ st.markdown(f"""
             font-weight: 500;
             color: {BRITVIC_PRIMARY};
         }}
+        /* Estilo para o menu de navegação */
+        .nav-menu {{
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            z-index: 1000;
+        }}
+        .nav-menu a {{
+            display: block;
+            padding: 8px 15px;
+            color: {BRITVIC_PRIMARY};
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 5px 0;
+            transition: background-color 0.3s;
+        }}
+        .nav-menu a:hover {{
+            background-color: {BRITVIC_BG};
+            color: {BRITVIC_ACCENT};
+        }}
+        .nav-title {{
+            font-weight: bold;
+            color: {BRITVIC_PRIMARY};
+            margin-bottom: 10px;
+            text-align: center;
+        }}
     </style>
+    
+    <!-- Navigation Menu -->
+    <div class="nav-menu">
+        <div class="nav-title">{t('nav_title')}</div>
+        <a href="#kpis">{t('nav_kpis')}</a>
+        <a href="#daily">{t('nav_daily')}</a>
+        <a href="#monthly">{t('nav_monthly')}</a>
+        <a href="#seasonal">{t('nav_seasonal')}</a>
+        <a href="#yearly">{t('nav_yearly')}</a>
+        <a href="#forecast">{t('nav_forecast')}</a>
+        <a href="#insights">{t('nav_insights')}</a>
+        <a href="#export">{t('nav_export')}</a>
+    </div>
 """, unsafe_allow_html=True)
 
 # ----------- Topo/logomarca ------------
@@ -373,8 +437,6 @@ def reset_filtros():
         "data_fim": default_data_fim,
         "usar_range_datas": default_usar_range
     }
-    # Remova as linhas que modificam diretamente os widgets
-    # Force o recarregamento da página
     st.rerun()
 
 with st.sidebar:
@@ -464,6 +526,7 @@ if df_filtrado.empty:
 
 # --------- KPIs / Métricas --------
 def exibe_kpis(df, categoria):
+    st.markdown('<div id="kpis"></div>', unsafe_allow_html=True)
     df_cat = df[df['categoria'] == categoria]
     if df_cat.empty:
         st.info(t("no_data_selection"))
@@ -504,11 +567,8 @@ def exibe_kpis(df, categoria):
     st.markdown("</div>", unsafe_allow_html=True)
     return kpis
 
-exibe_kpis(df_filtrado, st.session_state["filtros"]["categoria"])
-
-# --------- GRÁFICOS ---------
-
 def plot_tendencia(df, categoria):
+    st.markdown('<div id="daily"></div>', unsafe_allow_html=True)
     grupo = gerar_dataset_modelo(df, categoria)
     if grupo.empty:
         st.info(t("no_trend"))
@@ -532,6 +592,7 @@ def plot_tendencia(df, categoria):
     st.plotly_chart(fig, use_container_width=True)
 
 def plot_variacao_mensal(df, categoria):
+    st.markdown('<div id="monthly"></div>', unsafe_allow_html=True)
     agrup = dataset_ano_mes(df, categoria)
     mensal = agrup.groupby([agrup['data'].dt.to_period('M')])['caixas_produzidas'].sum().reset_index()
     mensal['mes'] = mensal['data'].dt.strftime('%b/%Y')
@@ -542,7 +603,8 @@ def plot_variacao_mensal(df, categoria):
         labels={"mes":t("month_lbl"), "caixas_produzidas":t("produced_boxes")}
     )
     fig1.update_traces(marker_color=BRITVIC_ACCENT)
-    fig1.update_layout(template="plotly_white", title_font_color=BRITVIC_PRIMARY, plot_bgcolor=BRITVIC_BG)
+    fig1.update_layout(template="plotly_white", title_font_color=BRITVIC_PRIMARY, plot_bgcolor=BRITV
+IC_BG)
     fig2 = px.line(
         mensal, x='mes', y='var_%', markers=True,
         title=t("monthly_var", cat=categoria),
@@ -554,6 +616,7 @@ def plot_variacao_mensal(df, categoria):
     st.plotly_chart(fig2, use_container_width=True)
 
 def plot_sazonalidade(df, categoria):
+    st.markdown('<div id="seasonal"></div>', unsafe_allow_html=True)
     agrup = dataset_ano_mes(df, categoria)
     if agrup.empty:
         st.info(t("no_trend"))
@@ -579,6 +642,7 @@ def plot_sazonalidade(df, categoria):
     st.plotly_chart(fig, use_container_width=True)
 
 def plot_comparativo_ano_mes(df, categoria):
+    st.markdown('<div id="yearly"></div>', unsafe_allow_html=True)
     agrup = dataset_ano_mes(df, categoria)
     tab = agrup.groupby(['ano','mes'])['caixas_produzidas'].sum().reset_index()
     tab['mes_nome'] = tab['mes'].apply(nome_mes)
@@ -636,6 +700,7 @@ def plot_comparativo_acumulado(df, categoria):
     st.plotly_chart(fig, use_container_width=True)
 
 def rodar_previsao_prophet(df, categoria, meses_futuro=6):
+    st.markdown('<div id="forecast"></div>', unsafe_allow_html=True)
     dataset = gerar_dataset_modelo(df, categoria)
     if dataset.shape[0] < 2:
         return dataset, pd.DataFrame(), None
@@ -669,6 +734,7 @@ def plot_previsao(dados_hist, previsao, categoria):
     st.plotly_chart(fig, use_container_width=True)
 
 def gerar_insights(df, categoria):
+    st.markdown('<div id="insights"></div>', unsafe_allow_html=True)
     grupo = gerar_dataset_modelo(df, categoria)
     tendencias = []
     mensal = grupo.copy()
@@ -696,6 +762,7 @@ def gerar_insights(df, categoria):
             st.success(t("no_pattern"))
 
 def exportar_consolidado(df, previsao, categoria):
+    st.markdown('<div id="export"></div>', unsafe_allow_html=True)
     if previsao.empty:
         st.warning(t("no_export"))
         return
@@ -707,6 +774,7 @@ def exportar_consolidado(df, previsao, categoria):
     return base_export, nome_arq
 
 # ---- Execução dos gráficos e análises ----
+exibe_kpis(df_filtrado, st.session_state["filtros"]["categoria"])
 plot_tendencia(df_filtrado, st.session_state["filtros"]["categoria"])
 plot_variacao_mensal(df_filtrado, st.session_state["filtros"]["categoria"])
 plot_sazonalidade(df_filtrado, st.session_state["filtros"]["categoria"])
