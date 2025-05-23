@@ -373,12 +373,9 @@ def reset_filtros():
         "data_fim": default_data_fim,
         "usar_range_datas": default_usar_range
     }
-    st.session_state["catbox"] = default_categoria
-    st.session_state["anobox"] = default_anos
-    st.session_state["mesbox"] = default_meses_nome
-    st.session_state["date_range_toggle"] = default_usar_range
-    st.session_state["start_date"] = default_data_inicio
-    st.session_state["end_date"] = default_data_fim
+    # Remova as linhas que modificam diretamente os widgets
+    # Force o recarregamento da página
+    st.rerun()
 
 with st.sidebar:
     categoria_analise = st.selectbox(t("category"), categorias, index=categorias.index(st.session_state["filtros"]["categoria"]) if categorias else 0, key="catbox")
