@@ -10,7 +10,6 @@ import zipfile
 # from prophet import Prophet  # Comentado
 import calendar
 from datetime import datetime, date, timedelta
-import streamlit_date_picker as date_picker
 
 st.set_page_config(
     page_title="Dashboard de Produção",
