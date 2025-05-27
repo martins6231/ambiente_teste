@@ -7,7 +7,6 @@ import io
 import requests
 import tempfile
 import zipfile
-from prophet import Prophet
 import calendar
 from datetime import datetime, timedelta
 from streamlit_extras.metric_cards import style_metric_cards
