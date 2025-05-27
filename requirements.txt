@@ -2,7 +2,5 @@ streamlit
 pandas
 numpy
 plotly
-requests
-openpyxl
 prophet
-xlrd
+openpyxl
