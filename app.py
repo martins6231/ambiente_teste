@@ -3,896 +3,614 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
-import locale
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error, r2_score
-import warnings
-warnings.filterwarnings('ignore')
+import io
+import requests
+import tempfile
+import zipfile
+from prophet import Prophet
+import calendar
 
-# Configurações da página com design moderno
 st.set_page_config(
     page_title="Dashboard de Produção - Britvic",
-    page_icon="🏭",
     layout="wide",
-    initial_sidebar_state="expanded"
+    page_icon="🧃"
 )
 
-# CSS customizado para melhorar UX/UI
-st.markdown("""
-    <style>
-    /* Tema principal com cores modernas */
-    :root {
-        --primary-color: #1f77b4;
-        --secondary-color: #ff7f0e;
-        --success-color: #2ca02c;
-        --danger-color: #d62728;
-        --background-color: #f0f2f6;
-        --card-background: #ffffff;
-        --text-color: #262730;
-        --border-radius: 10px;
-        --box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    /* Container principal com margem e padding otimizados */
-    .main {
-        padding: 1rem 2rem;
-        max-width: 1400px;
-        margin: 0 auto;
-    }
-    
-    /* Cards modernos com sombra suave */
-    .stMetric {
-        background-color: var(--card-background);
-        padding: 1.5rem;
-        border-radius: var(--border-radius);
-        box-shadow: var(--box-shadow);
-        transition: transform 0.2s, box-shadow 0.2s;
-    }
-    
-    .stMetric:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-    }
-    
-    /* Sidebar moderna */
-    .css-1d391kg {
-        background-color: #f8f9fa;
-        padding: 2rem 1rem;
-    }
-    
-    /* Headers com estilo consistente */
-    h1, h2, h3 {
-        color: var(--text-color);
-        font-weight: 600;
-    }
-    
-    /* Botões estilizados */
-    .stButton > button {
-        background-color: var(--primary-color);
-        color: white;
-        border: none;
-        padding: 0.5rem 1rem;
-        border-radius: 5px;
-        font-weight: 500;
-        transition: all 0.3s;
-    }
-    
-    .stButton > button:hover {
-        background-color: #1557a0;
-        transform: translateY(-1px);
-    }
-    
-    /* Date Range Picker customizado */
-    .date-range-container {
-        background-color: var(--card-background);
-        padding: 1rem;
-        border-radius: var(--border-radius);
-        margin-bottom: 1rem;
-        box-shadow: var(--box-shadow);
-    }
-    
-    /* Tabs estilizadas */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        background-color: var(--background-color);
-        padding: 0.5rem;
-        border-radius: var(--border-radius);
-    }
-    
-    .stTabs [data-baseweb="tab"] {
-        height: 40px;
-        background-color: white;
-        border-radius: 5px;
-        color: var(--text-color);
-        font-weight: 500;
-    }
-    
-    .stTabs [aria-selected="true"] {
-        background-color: var(--primary-color);
-        color: white;
-    }
-    
-    /* Métricas responsivas */
-    @media (max-width: 768px) {
-        .main {
-            padding: 0.5rem;
-        }
-        
-        .stMetric {
-            padding: 1rem;
-        }
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# Configuração de localização
-try:
-    locale.setlocale(locale.LC_ALL, 'pt_BR.UTF-8')
-except:
-    try:
-        locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
-    except:
-        pass
-
-# Estado da sessão para controle de idioma
-if 'language' not in st.session_state:
-    st.session_state.language = 'pt'
-
-# Dicionário de traduções aprimorado
-translations = {
-    'pt': {
-        'title': '🏭 Dashboard de Produção',
-        'subtitle': 'Monitoramento e Análise em Tempo Real',
-        'filters': '🔍 Filtros',
-        'date_range': '📅 Período de Análise',
-        'quick_ranges': 'Períodos Rápidos:',
-        'last_7_days': 'Últimos 7 dias',
-        'last_30_days': 'Últimos 30 dias',
-        'last_90_days': 'Últimos 90 dias',
-        'current_month': 'Mês atual',
-        'current_year': 'Ano atual',
-        'custom_range': 'Período personalizado',
-        'start_date': 'Data inicial',
-        'end_date': 'Data final',
-        'line': 'Linha de Produção',
-        'shift': 'Turno',
-        'product': 'Produto',
-        'all': 'Todos',
-        'overview': '📊 Visão Geral',
-        'efficiency': '⚡ Eficiência',
-        'quality': '✅ Qualidade',
-        'predictions': '🔮 Previsões',
-        'total_production': 'Produção Total',
-        'average_efficiency': 'Eficiência Média',
-        'quality_rate': 'Taxa de Qualidade',
-        'units_produced': 'Unidades Produzidas',
-        'production_trend': 'Tendência de Produção',
-        'efficiency_by_line': 'Eficiência por Linha',
-        'daily_production': 'Produção Diária',
-        'quality_analysis': 'Análise de Qualidade',
-        'defects_by_type': 'Defeitos por Tipo',
-        'quality_trend': 'Tendência de Qualidade',
-        'predictive_model': 'Modelo Preditivo',
-        'model_accuracy': 'Precisão do Modelo',
-        'mae': 'Erro Médio Absoluto',
-        'r2': 'R² Score',
-        'predicted_vs_actual': 'Previsto vs Real',
-        'insights': '💡 Insights Automáticos',
-        'top_insights': 'Principais Descobertas',
-        'download_report': '📥 Baixar Relatório',
-        'generating_report': 'Gerando relatório...',
-        'report_generated': 'Relatório gerado com sucesso!',
-        'morning': 'Manhã',
-        'afternoon': 'Tarde',
-        'night': 'Noite'
-    },
-    'en': {
-        'title': '🏭 Production Dashboard',
-        'subtitle': 'Real-time Monitoring and Analysis',
-        'filters': '🔍 Filters',
-        'date_range': '📅 Analysis Period',
-        'quick_ranges': 'Quick Ranges:',
-        'last_7_days': 'Last 7 days',
-        'last_30_days': 'Last 30 days',
-        'last_90_days': 'Last 90 days',
-        'current_month': 'Current month',
-        'current_year': 'Current year',
-        'custom_range': 'Custom range',
-        'start_date': 'Start date',
-        'end_date': 'End date',
-        'line': 'Production Line',
-        'shift': 'Shift',
-        'product': 'Product',
-        'all': 'All',
-        'overview': '📊 Overview',
-        'efficiency': '⚡ Efficiency',
-        'quality': '✅ Quality',
-        'predictions': '🔮 Predictions',
-        'total_production': 'Total Production',
-        'average_efficiency': 'Average Efficiency',
-        'quality_rate': 'Quality Rate',
-        'units_produced': 'Units Produced',
-        'production_trend': 'Production Trend',
-        'efficiency_by_line': 'Efficiency by Line',
-        'daily_production': 'Daily Production',
-        'quality_analysis': 'Quality Analysis',
-        'defects_by_type': 'Defects by Type',
-        'quality_trend': 'Quality Trend',
-        'predictive_model': 'Predictive Model',
-        'model_accuracy': 'Model Accuracy',
-        'mae': 'Mean Absolute Error',
-        'r2': 'R² Score',
-        'predicted_vs_actual': 'Predicted vs Actual',
-        'insights': '💡 Automatic Insights',
-        'top_insights': 'Key Findings',
-        'download_report': '📥 Download Report',
-        'generating_report': 'Generating report...',
-        'report_generated': 'Report generated successfully!',
-        'morning': 'Morning',
-        'afternoon': 'Afternoon',
-        'night': 'Night'
-    }
+# ----------- Suporte Bilíngue (Português e Inglês) -----------
+LANGS = {
+    "pt": "Português (Brasil)",
+    "en": "English"
 }
 
-def t(key):
-    """Função de tradução"""
-    return translations[st.session_state.language].get(key, key)
+st.sidebar.markdown("## 🌐 Idioma | Language")
+idioma = st.sidebar.radio("Escolha o idioma / Choose language:", options=list(LANGS.keys()), format_func=lambda x: LANGS[x], key="user_lang")
 
-@st.cache_data
-def generate_sample_data():
-    """Gera dados de exemplo para o dashboard"""
-    np.random.seed(42)
-    
-    # Datas dos últimos 365 dias
-    dates = pd.date_range(end=datetime.now(), periods=365, freq='D')
-    
-    # Configuração dos dados
-    lines = ['Linha A', 'Linha B', 'Linha C', 'Linha D']
-    products = ['Produto 1', 'Produto 2', 'Produto 3', 'Produto 4', 'Produto 5']
-    shifts = ['morning', 'afternoon', 'night']
-    
-    data = []
-    
-    for date in dates:
-        for line in lines:
-            for shift in shifts:
-                # Produção base com sazonalidade
-                base_production = 1000 + np.sin(date.dayofyear * 2 * np.pi / 365) * 200
-                
-                # Variação por linha
-                line_factor = {'Linha A': 1.2, 'Linha B': 1.0, 'Linha C': 0.9, 'Linha D': 1.1}[line]
-                
-                # Variação por turno
-                shift_factor = {'morning': 0.9, 'afternoon': 1.0, 'night': 0.8}[shift]
-                
-                production = int(base_production * line_factor * shift_factor + np.random.normal(0, 100))
-                production = max(0, production)
-                
-                # Eficiência (com tendência positiva ao longo do tempo)
-                base_efficiency = 75 + (date - dates[0]).days / 365 * 5
-                efficiency = min(100, max(0, base_efficiency + np.random.normal(0, 5)))
-                
-                # Qualidade
-                quality = min(100, max(0, 95 + np.random.normal(0, 2)))
-                
-                # Defeitos
-                defects = max(0, int(production * (100 - quality) / 100))
-                
-                data.append({
-                    'date': date,
-                    'production_line': line,
-                    'shift': shift,
-                    'product': np.random.choice(products),
-                    'units_produced': production,
-                    'efficiency': efficiency,
-                    'quality_rate': quality,
-                    'defects': defects,
-                    'downtime_minutes': max(0, int(np.random.exponential(10))),
-                    'energy_consumption': production * 0.5 + np.random.normal(0, 50)
-                })
-    
-    return pd.DataFrame(data)
+def t(msg_key, **kwargs):
+    TRANSLATE = {
+        "pt": {
+            "dashboard_title": "Dashboard de Produção - Britvic",
+            "main_title": "Dashboard de Produção",
+            "subtitle": "Visualização dos dados de produção Britvic",
+            "category": "🏷️ Categoria:",
+            "year": "📅 Ano(s):",
+            "month": "📆 Mês(es):",
+            "analysis_for": "Análise para categoria: <b>{cat}</b>",
+            "empty_data_for_period": "Não há dados para esse período e categoria.",
+            "mandatory_col_missing": "Coluna obrigatória ausente: {col}",
+            "error_date_conversion": "Erro ao converter coluna 'data'.",
+            "col_with_missing": "Coluna '{col}' com {num} valores ausentes.",
+            "negatives": "{num} registros negativos em 'caixas_produzidas'.",
+            "no_critical": "Nenhum problema crítico encontrado.",
+            "data_issue_report": "Relatório de problemas encontrados",
+            "no_data_selection": "Sem dados para a seleção.",
+            "no_trend": "Sem dados para tendência.",
+            "daily_trend": "Tendência Diária - {cat}",
+            "monthly_total": "Produção Mensal Total - {cat}",
+            "monthly_var": "Variação Percentual Mensal (%) - {cat}",
+            "monthly_seasonal": "Sazonalidade Mensal - {cat}",
+            "monthly_comp": "Produção Mensal {cat} - Comparativo por Ano",
+            "monthly_accum": "Produção Acumulada Mês a Mês - {cat}",
+            "no_forecast": "Sem previsão disponível.",
+            "forecast": "Previsão de Produção - {cat}",
+            "auto_insights": "Insights Automáticos",
+            "no_pattern": "Nenhum padrão preocupante encontrado para esta categoria.",
+            "recent_growth": "Crescimento recente na produção detectado nos últimos meses.",
+            "recent_fall": "Queda recente na produção detectada nos últimos meses.",
+            "outlier_days": "Foram encontrados {num} dias atípicos de produção (possíveis outliers).",
+            "high_var": "Alta variabilidade diária. Sugerido investigar causas das flutuações.",
+            "export": "Exportação",
+            "export_with_fc": "⬇️ Exportar consolidado com previsão (.xlsx)",
+            "download_file": "Download arquivo Excel ⬇️",
+            "no_export": "Sem previsão para exportar.",
+            "add_secrets": "Adicione CLOUD_XLSX_URL ao seu .streamlit/secrets.toml e compartilhe a planilha para 'qualquer pessoa com o link'.",
+            "error_download_xls": "Erro ao baixar planilha. Status code: {code}",
+            "not_valid_excel": "Arquivo baixado não é um Excel válido. Confirme se o link é público/correto!",
+            "excel_open_error": "Erro ao abrir o Excel: {err}",
+            "kpi_year": "📦 Ano {ano}",
+            "kpi_sum": "{qtd:,} caixas",
+            "historico": "Histórico",
+            "kpi_daily_avg": "Média diária:<br><b style='color:{accent};font-size:1.15em'>{media:.0f}</b>",
+            "kpi_records": "Registros: <b>{count}</b>",
+            # Labels
+            "data": "Data",
+            "category_lbl": "Categoria",
+            "produced_boxes": "Caixas Produzidas",
+            "month_lbl": "Mês/Ano",
+            "variation": "Variação (%)",
+            "prod": "Produção",
+            "year_lbl": "Ano",
+            "accum_boxes": "Caixas Acumuladas",
+            "forecast_boxes": "Previsão Caixas",
+        },
+        "en": {
+            "dashboard_title": "Production Dashboard - Britvic",
+            "main_title": "Production Dashboard",
+            "subtitle": "Britvic production data visualization",
+            "category": "🏷️ Category:",
+            "year": "📅 Year(s):",
+            "month": "📆 Month(s):",
+            "analysis_for": "Analysis for category: <b>{cat}</b>",
+            "empty_data_for_period": "No data for this period and category.",
+            "mandatory_col_missing": "Mandatory column missing: {col}",
+            "error_date_conversion": "Error converting 'data' column.",
+            "col_with_missing": "Column '{col}' has {num} missing values.",
+            "negatives": "{num} negative records in 'caixas_produzidas'.",
+            "no_critical": "No critical issues found.",
+            "data_issue_report": "Report of Identified Issues",
+            "no_data_selection": "No data for selection.",
+            "no_trend": "No data for trend.",
+            "daily_trend": "Daily Trend - {cat}",
+            "monthly_total": "Total Monthly Production - {cat}",
+            "monthly_var": "Monthly Change (%) - {cat}",
+            "monthly_seasonal": "Monthly Seasonality - {cat}",
+            "monthly_comp": "Monthly Production {cat} - Year Comparison",
+            "monthly_accum": "Accumulated Production Month by Month - {cat}",
+            "no_forecast": "No available forecast.",
+            "forecast": "Production Forecast - {cat}",
+            "auto_insights": "Automatic Insights",
+            "no_pattern": "No concerning patterns found for this category.",
+            "recent_growth": "Recent growth in production detected in the last months.",
+            "recent_fall": "Recent drop in production detected in the last months.",
+            "outlier_days": "{num} atypical production days found (possible outliers).",
+            "high_var": "High daily variability. Suggest to investigate fluctuation causes.",
+            "export": "Export",
+            "export_with_fc": "⬇️ Export with forecast (.xlsx)",
+            "download_file": "Download Excel file ⬇️",
+            "no_export": "No forecast to export.",
+            "add_secrets": "Add CLOUD_XLSX_URL to your .streamlit/secrets.toml and share the sheet to 'anyone with the link'.",
+            "error_download_xls": "Error downloading spreadsheet. Status code: {code}",
+            "not_valid_excel": "Downloaded file is not a valid Excel. Confirm the link is public/correct!",
+            "excel_open_error": "Error opening Excel: {err}",
+            "kpi_year": "📦 Year {ano}",
+            "kpi_sum": "{qtd:,} boxes",
+            "historico": "History",
+            "kpi_daily_avg": "Daily avg.:<br><b style='color:{accent};font-size:1.15em'>{media:.0f}</b>",
+            "kpi_records": "Records: <b>{count}</b>",
+            # Labels
+            "data": "Date",
+            "category_lbl": "Category",
+            "produced_boxes": "Produced Boxes",
+            "month_lbl": "Month/Year",
+            "variation": "Variation (%)",
+            "prod": "Production",
+            "year_lbl": "Year",
+            "accum_boxes": "Accum. Boxes",
+            "forecast_boxes": "Forecasted Boxes",
+        }
+    }
+    base = TRANSLATE[idioma].get(msg_key, msg_key)
+    if kwargs:
+        base = base.format(**kwargs)
+    return base
 
-# NOVA FUNÇÃO: Date Range Picker aprimorado
-def render_date_range_picker(df):
-    """
-    Renderiza um seletor de intervalo de datas moderno e intuitivo
-    Retorna as datas selecionadas
-    """
-    with st.container():
-        st.markdown(f"### {t('date_range')}")
-        
-        # Container estilizado para o date picker
-        st.markdown('<div class="date-range-container">', unsafe_allow_html=True)
-        
-        col1, col2 = st.columns([1, 2])
-        
-        with col1:
-            # Seleção rápida de períodos
-            st.markdown(f"**{t('quick_ranges')}**")
-            
-            quick_range = st.radio(
-                "",
-                options=['last_7_days', 'last_30_days', 'last_90_days', 
-                        'current_month', 'current_year', 'custom_range'],
-                format_func=lambda x: t(x),
-                key='quick_range_selector',
-                label_visibility="collapsed"
-            )
-            
-        with col2:
-            # Cálculo automático de datas baseado na seleção rápida
-            today = datetime.now().date()
-            
-            if quick_range == 'last_7_days':
-                default_start = today - timedelta(days=7)
-                default_end = today
-            elif quick_range == 'last_30_days':
-                default_start = today - timedelta(days=30)
-                default_end = today
-            elif quick_range == 'last_90_days':
-                default_start = today - timedelta(days=90)
-                default_end = today
-            elif quick_range == 'current_month':
-                default_start = today.replace(day=1)
-                default_end = today
-            elif quick_range == 'current_year':
-                default_start = today.replace(month=1, day=1)
-                default_end = today
-            else:  # custom_range
-                default_start = df['date'].min().date()
-                default_end = df['date'].max().date()
-            
-            # Seletores de data com validação
-            col_start, col_end = st.columns(2)
-            
-            with col_start:
-                start_date = st.date_input(
-                    t('start_date'),
-                    value=default_start,
-                    min_value=df['date'].min().date(),
-                    max_value=df['date'].max().date(),
-                    key='start_date_picker',
-                    disabled=(quick_range != 'custom_range')
-                )
-            
-            with col_end:
-                end_date = st.date_input(
-                    t('end_date'),
-                    value=default_end,
-                    min_value=df['date'].min().date(),
-                    max_value=df['date'].max().date(),
-                    key='end_date_picker',
-                    disabled=(quick_range != 'custom_range')
-                )
-            
-            # Validação de intervalo
-            if start_date > end_date:
-                st.error("⚠️ A data inicial deve ser anterior à data final!")
-                start_date, end_date = end_date, start_date
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Mostrar período selecionado
-        days_selected = (end_date - start_date).days + 1
-        st.info(f"📅 Período selecionado: {start_date.strftime('%d/%m/%Y')} até {end_date.strftime('%d/%m/%Y')} ({days_selected} dias)")
-        
-    return pd.Timestamp(start_date), pd.Timestamp(end_date)
+# -------------- Layout e Cor padrão -------------
+BRITVIC_PRIMARY = "#003057"
+BRITVIC_ACCENT = "#27AE60"
+BRITVIC_BG = "#F4FFF6"
 
-def generate_insights(df_filtered):
-    """Gera insights automáticos baseados nos dados filtrados"""
-    insights = []
-    
-    # Insight 1: Linha mais eficiente
-    efficiency_by_line = df_filtered.groupby('production_line')['efficiency'].mean()
-    best_line = efficiency_by_line.idxmax()
-    best_efficiency = efficiency_by_line.max()
-    insights.append(f"🏆 {best_line} é a linha mais eficiente com {best_efficiency:.1f}% de eficiência média")
-    
-    # Insight 2: Tendência de produção
-    daily_production = df_filtered.groupby('date')['units_produced'].sum()
-    if len(daily_production) > 1:
-        trend = (daily_production.iloc[-1] - daily_production.iloc[0]) / daily_production.iloc[0] * 100
-        trend_text = "aumentou" if trend > 0 else "diminuiu"
-        insights.append(f"📈 A produção {trend_text} {abs(trend):.1f}% no período selecionado")
-    
-    # Insight 3: Melhor turno
-    production_by_shift = df_filtered.groupby('shift')['units_produced'].sum()
-    best_shift = production_by_shift.idxmax()
-    shift_names = {'morning': t('morning'), 'afternoon': t('afternoon'), 'night': t('night')}
-    insights.append(f"⏰ O turno da {shift_names.get(best_shift, best_shift)} produz mais unidades")
-    
-    # Insight 4: Taxa de defeitos
-    defect_rate = (df_filtered['defects'].sum() / df_filtered['units_produced'].sum() * 100)
-    insights.append(f"🔧 Taxa média de defeitos: {defect_rate:.2f}%")
-    
-    return insights
+# ---------- CSS Customizado ----------
+st.markdown(f"""
+    <style>
+        .stApp {{
+            background-color: {BRITVIC_BG};
+        }}
+        .center {{
+            text-align: center;
+        }}
+        .britvic-title {{
+            font-size: 2.6rem;
+            font-weight: bold;
+            color: {BRITVIC_PRIMARY};
+            text-align: center;
+            margin-bottom: 0.3em;
+        }}
+        .subtitle {{
+            text-align: center;
+            color: {BRITVIC_PRIMARY};
+            font-size: 1.0rem;
+            margin-bottom: 1em;
+        }}
+    </style>
+""", unsafe_allow_html=True)
 
-def main():
-    """Função principal do dashboard"""
-    # Header com seletor de idioma
-    col1, col2 = st.columns([6, 1])
-    with col1:
-        st.title(t('title'))
-        st.markdown(f"*{t('subtitle')}*")
-    with col2:
-        lang = st.selectbox(
-            "🌐",
-            options=['pt', 'en'],
-            format_func=lambda x: '🇧🇷 PT' if x == 'pt' else '🇺🇸 EN',
-            key='language_selector',
-            label_visibility="collapsed"
-        )
-        st.session_state.language = lang
-    
-    # Carrega dados
-    df = generate_sample_data()
-    
-    # Sidebar com filtros
-    with st.sidebar:
-        st.header(t('filters'))
-        
-        # NOVO: Date Range Picker integrado
-        start_date, end_date = render_date_range_picker(df)
-        
-        st.markdown("---")
-        
-        # Outros filtros existentes com design aprimorado
-        selected_lines = st.multiselect(
-            t('line'),
-            options=df['production_line'].unique(),
-            default=df['production_line'].unique(),
-            key='line_filter'
-        )
-        
-        selected_shifts = st.multiselect(
-            t('shift'),
-            options=df['shift'].unique(),
-            default=df['shift'].unique(),
-            format_func=lambda x: t(x),
-            key='shift_filter'
-        )
-        
-        selected_products = st.multiselect(
-            t('product'),
-            options=df['product'].unique(),
-            default=df['product'].unique()[:3],
-            key='product_filter'
-        )
-    
-    # Aplicar filtros incluindo o novo filtro de data
-    df_filtered = df[
-        (df['date'] >= start_date) & 
-        (df['date'] <= end_date) &
-        (df['production_line'].isin(selected_lines)) &
-        (df['shift'].isin(selected_shifts)) &
-        (df['product'].isin(selected_products))
-    ].copy()
-    
-    # Adiciona colunas de análise
-    df_filtered['date_str'] = df_filtered['date'].dt.strftime('%Y-%m-%d')
-    df_filtered['month'] = df_filtered['date'].dt.to_period('M').astype(str)
-    df_filtered['shift_name'] = df_filtered['shift'].map({
-        'morning': t('morning'), 
-        'afternoon': t('afternoon'), 
-        'night': t('night')
-    })
-    
-    # Tabs principais com design moderno
-    tabs = st.tabs([t('overview'), t('efficiency'), t('quality'), t('predictions')])
-    
-    # Tab 1: Visão Geral
-    with tabs[0]:
-        # KPIs em cards modernos
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            total_production = df_filtered['units_produced'].sum()
-            st.metric(
-                t('total_production'),
-                f"{total_production:,.0f}",
-                f"{t('units_produced').lower()}"
-            )
-        
-        with col2:
-            avg_efficiency = df_filtered['efficiency'].mean()
-            st.metric(
-                t('average_efficiency'),
-                f"{avg_efficiency:.1f}%",
-                f"+{avg_efficiency-70:.1f}%" if avg_efficiency > 70 else f"{avg_efficiency-70:.1f}%"
-            )
-        
-        with col3:
-            avg_quality = df_filtered['quality_rate'].mean()
-            st.metric(
-                t('quality_rate'),
-                f"{avg_quality:.1f}%",
-                f"+{avg_quality-90:.1f}%" if avg_quality > 90 else f"{avg_quality-90:.1f}%"
-            )
-        
-        with col4:
-            total_defects = df_filtered['defects'].sum()
-            defect_rate = (total_defects / total_production * 100) if total_production > 0 else 0
-            st.metric(
-                "Taxa de Defeitos",
-                f"{defect_rate:.2f}%",
-                f"-{5-defect_rate:.2f}%" if defect_rate < 5 else f"+{defect_rate-5:.2f}%",
-                delta_color="inverse"
-            )
-        
-        st.markdown("---")
-        
-        # Gráficos principais com layout responsivo
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Tendência de produção com média móvel
-            daily_prod = df_filtered.groupby('date_str')['units_produced'].sum().reset_index()
-            daily_prod['MA7'] = daily_prod['units_produced'].rolling(window=7, min_periods=1).mean()
-            
-            fig_trend = go.Figure()
-            fig_trend.add_trace(go.Scatter(
-                x=daily_prod['date_str'],
-                y=daily_prod['units_produced'],
-                mode='lines',
-                name='Produção Diária',
-                line=dict(color='#1f77b4', width=2),
-                fill='tozeroy',
-                fillcolor='rgba(31, 119, 180, 0.2)'
-            ))
-            fig_trend.add_trace(go.Scatter(
-                x=daily_prod['date_str'],
-                y=daily_prod['MA7'],
-                mode='lines',
-                name='Média Móvel (7 dias)',
-                line=dict(color='#ff7f0e', width=3, dash='dot')
-            ))
-            fig_trend.update_layout(
-                title=t('production_trend'),
-                xaxis_title="Data",
-                yaxis_title=t('units_produced'),
-                hovermode='x unified',
-                showlegend=True,
-                height=400
-            )
-            st.plotly_chart(fig_trend, use_container_width=True)
-        
-        with col2:
-            # Eficiência por linha com cores personalizadas
-            eff_by_line = df_filtered.groupby('production_line')['efficiency'].mean().reset_index()
-            eff_by_line = eff_by_line.sort_values('efficiency', ascending=True)
-            
-            fig_eff = px.bar(
-                eff_by_line,
-                x='efficiency',
-                y='production_line',
-                orientation='h',
-                title=t('efficiency_by_line'),
-                color='efficiency',
-                color_continuous_scale='RdYlGn',
-                range_color=[70, 100]
-            )
-            fig_eff.update_traces(
-                texttemplate='%{x:.1f}%',
-                textposition='outside'
-            )
-            fig_eff.update_layout(
-                xaxis_title="Eficiência (%)",
-                yaxis_title="",
-                showlegend=False,
-                height=400
-            )
-            st.plotly_chart(fig_eff, use_container_width=True)
-        
-        # Produção por produto - gráfico interativo
-        st.subheader("📊 Produção por Produto")
-        prod_by_product = df_filtered.groupby(['date_str', 'product'])['units_produced'].sum().reset_index()
-        
-        fig_product = px.area(
-            prod_by_product,
-            x='date_str',
-            y='units_produced',
-            color='product',
-            title="Evolução da Produção por Produto",
-            color_discrete_sequence=px.colors.qualitative.Set3
-        )
-        fig_product.update_layout(
-            xaxis_title="Data",
-            yaxis_title=t('units_produced'),
-            hovermode='x unified',
-            height=400
-        )
-        st.plotly_chart(fig_product, use_container_width=True)
-    
-    # Tab 2: Análise de Eficiência
-    with tabs[1]:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Heatmap de eficiência
-            pivot_eff = df_filtered.pivot_table(
-                values='efficiency',
-                index='production_line',
-                columns='shift_name',
-                aggfunc='mean'
-            )
-            
-            fig_heatmap = px.imshow(
-                pivot_eff,
-                labels=dict(x="Turno", y="Linha", color="Eficiência (%)"),
-                title="Mapa de Calor - Eficiência por Linha e Turno",
-                color_continuous_scale='RdYlGn',
-                aspect="auto"
-            )
-            fig_heatmap.update_traces(
-                text=pivot_eff.values.round(1),
-                texttemplate='%{text}%',
-                textfont={"size": 12}
-            )
-            st.plotly_chart(fig_heatmap, use_container_width=True)
-        
-        with col2:
-            # Box plot de eficiência
-            fig_box = px.box(
-                df_filtered,
-                x='production_line',
-                y='efficiency',
-                color='shift_name',
-                title="Distribuição de Eficiência",
-                color_discrete_sequence=px.colors.qualitative.Safe
-            )
-            fig_box.update_layout(
-                xaxis_title="Linha de Produção",
-                yaxis_title="Eficiência (%)",
-                showlegend=True
-            )
-            st.plotly_chart(fig_box, use_container_width=True)
-        
-        # Análise temporal de eficiência
-        st.subheader("⏰ Análise Temporal de Eficiência")
-        
-        # Eficiência por hora do dia (simulada)
-        df_filtered['hour'] = pd.to_datetime(df_filtered['date']).dt.hour
-        hourly_eff = df_filtered.groupby(['hour', 'shift_name'])['efficiency'].mean().reset_index()
-        
-        fig_hourly = px.line(
-            hourly_eff,
-            x='hour',
-            y='efficiency',
-            color='shift_name',
-            title="Padrão de Eficiência ao Longo do Dia",
-            markers=True,
-            color_discrete_sequence=px.colors.qualitative.Bold
-        )
-        fig_hourly.update_layout(
-            xaxis_title="Hora do Dia",
-            yaxis_title="Eficiência Média (%)",
-            xaxis=dict(tickmode='linear', tick0=0, dtick=2),
-            hovermode='x unified'
-        )
-        st.plotly_chart(fig_hourly, use_container_width=True)
-    
-    # Tab 3: Análise de Qualidade
-    with tabs[2]:
-        st.subheader(t('quality_analysis'))
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            # Defeitos por tipo (simulado)
-            defect_types = ['Dimensional', 'Visual', 'Funcional', 'Embalagem', 'Outros']
-            defect_counts = [
-                int(df_filtered['defects'].sum() * p) 
-                for p in [0.3, 0.25, 0.2, 0.15, 0.1]
-            ]
-            
-            fig_defects = go.Figure(data=[
-                go.Pie(
-                    labels=defect_types,
-                    values=defect_counts,
-                    hole=0.4,
-                    marker_colors=px.colors.sequential.RdBu
-                )
-            ])
-            fig_defects.update_layout(
-                title=t('defects_by_type'),
-                annotations=[dict(text='Defeitos', x=0.5, y=0.5, font_size=20, showarrow=False)]
-            )
-            st.plotly_chart(fig_defects, use_container_width=True)
-        
-        with col2:
-            # Tendência de qualidade
-            quality_trend = df_filtered.groupby('date_str')['quality_rate'].mean().reset_index()
-            
-            fig_quality = go.Figure()
-            fig_quality.add_trace(go.Scatter(
-                x=quality_trend['date_str'],
-                y=quality_trend['quality_rate'],
-                mode='lines+markers',
-                name='Taxa de Qualidade',
-                line=dict(color='green', width=3),
-                marker=dict(size=8)
-            ))
-            
-            # Linha de meta
-            fig_quality.add_hline(
-                y=95, 
-                line_dash="dash", 
-                line_color="red",
-                annotation_text="Meta: 95%"
-            )
-            
-            fig_quality.update_layout(
-                title=t('quality_trend'),
-                xaxis_title="Data",
-                yaxis_title="Taxa de Qualidade (%)",
-                yaxis=dict(range=[90, 100]),
-                hovermode='x unified'
-            )
-            st.plotly_chart(fig_quality, use_container_width=True)
-        
-        # Análise de correlação
-        st.subheader("🔍 Análise de Correlação")
-        
-        # Correlação entre variáveis
-        correlation_data = df_filtered[['efficiency', 'quality_rate', 'units_produced', 'downtime_minutes']].corr()
-        
-        fig_corr = px.imshow(
-            correlation_data,
-            labels=dict(color="Correlação"),
-            title="Matriz de Correlação",
-            color_continuous_scale='RdBu',
-            zmin=-1,
-            zmax=1
-        )
-        fig_corr.update_traces(
-            text=correlation_data.values.round(2),
-            texttemplate='%{text}',
-            textfont={"size": 14}
-        )
-        st.plotly_chart(fig_corr, use_container_width=True)
-    
-    # Tab 4: Modelo Preditivo
-    with tabs[3]:
-        st.subheader(t('predictive_model'))
-        
-        # Preparação dos dados para o modelo
-        df_model = df_filtered.copy()
-        df_model['day_of_week'] = pd.to_datetime(df_model['date']).dt.dayofweek
-        df_model['month'] = pd.to_datetime(df_model['date']).dt.month
-        df_model['line_encoded'] = pd.Categorical(df_model['production_line']).codes
-        df_model['shift_encoded'] = pd.Categorical(df_model['shift']).codes
-        
-        # Features e target
-        features = ['efficiency', 'line_encoded', 'shift_encoded', 'day_of_week', 'month']
-        X = df_model[features]
-        y = df_model['units_produced']
-        
-        # Divisão treino/teste
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-        
-        # Treinamento do modelo
-        model = RandomForestRegressor(n_estimators=100, random_state=42)
-        model.fit(X_train, y_train)
-        
-        # Previsões
-        y_pred = model.predict(X_test)
-        
-        # Métricas
-        mae = mean_absolute_error(y_test, y_pred)
-        r2 = r2_score(y_test, y_pred)
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric(t('model_accuracy'), f"{(1 - mae/y_test.mean())*100:.1f}%")
-        
-        with col2:
-            st.metric(t('mae'), f"{mae:.0f} unidades")
-        
-        with col3:
-            st.metric(t('r2'), f"{r2:.3f}")
-        
-        # Gráfico de previsão vs real
-        fig_pred = go.Figure()
-        
-        # Scatter plot
-        fig_pred.add_trace(go.Scatter(
-            x=y_test,
-            y=y_pred,
-            mode='markers',
-            name='Previsões',
-            marker=dict(
-                color='blue',
-                size=8,
-                opacity=0.6,
-                line=dict(width=1, color='DarkSlateGrey')
-            )
-        ))
-        
-        # Linha de referência perfeita
-        min_val = min(y_test.min(), y_pred.min())
-        max_val = max(y_test.max(), y_pred.max())
-        fig_pred.add_trace(go.Scatter(
-            x=[min_val, max_val],
-            y=[min_val, max_val],
-            mode='lines',
-            name='Previsão Perfeita',
-            line=dict(color='red', dash='dash')
-        ))
-        
-        fig_pred.update_layout(
-            title=t('predicted_vs_actual'),
-            xaxis_title="Produção Real",
-            yaxis_title="Produção Prevista",
-            hovermode='closest'
-        )
-        st.plotly_chart(fig_pred, use_container_width=True)
-        
-        # Feature importance
-        st.subheader("🎯 Importância das Variáveis")
-        
-        feature_importance = pd.DataFrame({
-            'feature': features,
-            'importance': model.feature_importances_
-        }).sort_values('importance', ascending=True)
-        
-        fig_importance = px.bar(
-            feature_importance,
-            x='importance',
-            y='feature',
-            orientation='h',
-            title="Importância das Features no Modelo",
-            color='importance',
-            color_continuous_scale='Viridis'
-        )
-        fig_importance.update_traces(
-            texttemplate='%{x:.3f}',
-            textposition='outside'
-        )
-        st.plotly_chart(fig_importance, use_container_width=True)
-    
-    # Seção de Insights com design moderno
-    st.markdown("---")
-    with st.expander(t('insights'), expanded=True):
-        st.subheader(t('top_insights'))
-        insights = generate_insights(df_filtered)
-        for i, insight in enumerate(insights, 1):
-            st.markdown(f"{i}. {insight}")
-    
-    # Botão de download com feedback visual
-    st.markdown("---")
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        if st.button(t('download_report'), type="primary", use_container_width=True):
-            with st.spinner(t('generating_report')):
-                # Simulação de geração de relatório
-                import time
-                time.sleep(2)
-                
-                # Criar CSV para download
-                csv = df_filtered.to_csv(index=False)
-                st.download_button(
-                    label="📄 Download CSV",
-                    data=csv,
-                    file_name=f"relatorio_producao_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv"
-                )
-                st.success(t('report_generated'))
-    
-    # Footer com informações adicionais
-    st.markdown("---")
+# ----------- Topo/logomarca ------------
+st.markdown(f"""
+    <div style="
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background-color: {BRITVIC_BG};
+        padding: 10px 0 20px 0;
+        margin-bottom: 20px;"
+    >
+        <img src="https://raw.githubusercontent.com/martins6231/app_atd/main/britvic_logo.png" alt="Britvic Logo" style="width: 150px; margin-bottom: 10px;">
+        <h1 style="
+            font-size: 2.2rem;
+            font-weight: bold;
+            color: {BRITVIC_PRIMARY};
+            margin: 0;"
+        >
+            {t("main_title")}
+        </h1>
+    </div>
+""", unsafe_allow_html=True)
+
+# ---------- Funções auxiliares ------------
+
+def nome_mes(numero):
+    return calendar.month_abbr[int(numero)] if idioma == "pt" else calendar.month_name[int(numero)][:3]
+
+def is_excel_file(file_path):
+    try:
+        with zipfile.ZipFile(file_path):
+            return True
+    except zipfile.BadZipFile:
+        return False
+    except Exception:
+        return False
+
+def convert_gsheet_link(shared_url):
+    if "docs.google.com/spreadsheets" in shared_url:
+        import re
+        match = re.search(r'/d/([a-zA-Z0-9-_]+)', shared_url)
+        if match:
+            sheet_id = match.group(1)
+            return f'https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx'
+    return shared_url
+
+@st.cache_data(ttl=600)
+def carregar_excel_nuvem(link):
+    url = convert_gsheet_link(link)
+    resp = requests.get(url)
+    if resp.status_code != 200:
+        st.error(t("error_download_xls", code=resp.status_code))
+        return None
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".xlsx") as tmp:
+        tmp.write(resp.content)
+        tmp.flush()
+        if not is_excel_file(tmp.name):
+            st.error(t("not_valid_excel"))
+            return None
+        try:
+            df = pd.read_excel(tmp.name, engine="openpyxl")
+        except Exception as e:
+            st.error(t("excel_open_error", err=e))
+            return None
+    return df
+
+if "CLOUD_XLSX_URL" not in st.secrets:
+    st.error(t("add_secrets"))
+    st.stop()
+
+xlsx_url = st.secrets["CLOUD_XLSX_URL"]
+df_raw = carregar_excel_nuvem(xlsx_url)
+if df_raw is None:
+    st.stop()
+
+def tratar_dados(df):
+    erros = []
+    df = df.rename(columns=lambda x: x.strip().lower().replace(" ", "_"))
+    obrigatorias = ['categoria', 'data', 'caixas_produzidas']
+    for col in obrigatorias:
+        if col not in df.columns:
+            erros.append(t("mandatory_col_missing", col=col))
+    try:
+        df['data'] = pd.to_datetime(df['data'])
+    except Exception:
+        erros.append(t("error_date_conversion"))
+    na_count = df.isna().sum()
+    for col, qtd in na_count.items():
+        if qtd > 0:
+            erros.append(t("col_with_missing", col=col, num=qtd))
+    negativos = (df['caixas_produzidas'] < 0).sum()
+    if negativos > 0:
+        erros.append(t("negatives", num=negativos))
+    df_clean = df.dropna(subset=['categoria', 'data', 'caixas_produzidas']).copy()
+    df_clean['caixas_produzidas'] = pd.to_numeric(df_clean['caixas_produzidas'], errors='coerce').fillna(0).astype(int)
+    df_clean = df_clean[df_clean['caixas_produzidas'] >= 0]
+    df_clean = df_clean.drop_duplicates(subset=['categoria', 'data'], keep='first')
+    return df_clean, erros
+
+df, erros = tratar_dados(df_raw)
+with st.expander(t("data_issue_report"), expanded=len(erros) > 0):
+    if erros:
+        for e in erros:
+            st.warning(e)
+    else:
+        st.success(t("no_critical"))
+
+def selecionar_categoria(df):
+    return sorted(df['categoria'].dropna().unique())
+
+def dataset_ano_mes(df, categoria=None):
+    df_filt = df if categoria is None else df[df['categoria'] == categoria]
+    df_filt['ano'] = df_filt['data'].dt.year
+    df_filt['mes'] = df_filt['data'].dt.month
+    return df_filt
+
+def filtrar_periodo(df, categoria, anos_selecionados, meses_selecionados):
+    cond = (df['categoria'] == categoria)
+    if anos_selecionados:
+        cond &= (df['data'].dt.year.isin(anos_selecionados))
+    if meses_selecionados:
+        cond &= (df['data'].dt.month.isin(meses_selecionados))
+    return df[cond].copy()
+
+def gerar_dataset_modelo(df, categoria=None):
+    df_cat = df[df['categoria'] == categoria] if categoria else df
+    grupo = df_cat.groupby('data')['caixas_produzidas'].sum().reset_index()
+    return grupo.sort_values('data')
+
+# ----------- Parâmetros / Filtros -----------
+categorias = selecionar_categoria(df)
+anos_disp = sorted(df['data'].dt.year.drop_duplicates())
+meses_disp = sorted(df['data'].dt.month.drop_duplicates())
+meses_nome = [f"{m:02d} - {calendar.month_name[m] if idioma == 'pt' else calendar.month_name[m][:3]}" for m in meses_disp]
+map_mes = dict(zip(meses_nome, meses_disp))
+
+default_categoria = categorias[0] if categorias else None
+default_anos = anos_disp
+default_meses_nome = meses_nome
+
+if "filtros" not in st.session_state:
+    st.session_state["filtros"] = {
+        "categoria": default_categoria,
+        "anos": default_anos,
+        "meses_nome": default_meses_nome
+    }
+
+with st.sidebar:
+    categoria_analise = st.selectbox(t("category"), categorias, index=categorias.index(st.session_state["filtros"]["categoria"]) if categorias else 0, key="catbox")
+    anos_selecionados = st.multiselect(t("year"), anos_disp, default=st.session_state["filtros"]["anos"], key="anobox")
+    meses_selecionados_nome = st.multiselect(
+    t("month"), 
+    meses_nome, 
+    default=default_meses_nome, 
+    key="mesbox"
+)
+st.session_state["filtros"]["categoria"] = st.session_state["catbox"]
+st.session_state["filtros"]["anos"] = st.session_state["anobox"]
+st.session_state["filtros"]["meses_nome"] = st.session_state["mesbox"]
+
+meses_selecionados = [map_mes[n] for n in st.session_state["filtros"]["meses_nome"] if n in map_mes]
+
+df_filtrado = filtrar_periodo(df, st.session_state["filtros"]["categoria"], st.session_state["filtros"]["anos"], meses_selecionados)
+
+# --------- Subtítulo ---------
+st.markdown(
+    f"<h3 style='color:{BRITVIC_ACCENT}; text-align:left;'>{t('analysis_for', cat=st.session_state['filtros']['categoria'])}</h3>",
+    unsafe_allow_html=True
+)
+if df_filtrado.empty:
+    st.error(t("empty_data_for_period"))
+    st.stop()
+
+# --------- KPIs / Métricas --------
+def exibe_kpis(df, categoria):
+    df_cat = df[df['categoria'] == categoria]
+    if df_cat.empty:
+        st.info(t("no_data_selection"))
+        return None
+    df_cat['ano'] = df_cat['data'].dt.year
+    kpis = df_cat.groupby('ano')['caixas_produzidas'].agg(['sum', 'mean', 'std', 'count']).reset_index()
     st.markdown(
-        """
-        <div style='text-align: center; color: #666; padding: 20px;'>
-            <p>Dashboard de Produção v2.0 | Desenvolvido com Streamlit</p>
-            <p>Última atualização: {} | Dados em tempo real</p>
-        </div>
-        """.format(datetime.now().strftime('%d/%m/%Y %H:%M')),
-        unsafe_allow_html=True
+        f"""
+        <div style="display: flex; justify-content: center; gap: 30px; margin-bottom: 18px;">
+        """, unsafe_allow_html=True
     )
+    for _, row in kpis.iterrows():
+        ano = int(row['ano'])
+        st.markdown(
+            f"""
+            <div style="
+                background: #e8f8ee;
+                border-radius: 18px;
+                box-shadow: 0 6px 28px 0 rgba(0, 48, 87, 0.13);
+                padding: 28px 38px 22px 38px;
+                min-width: 220px;
+                margin-bottom: 13px;
+                text-align: center;
+            ">
+                <div style="font-weight: 600; color: {BRITVIC_PRIMARY}; font-size: 1.12em; margin-bottom:5px;">
+                    {t("kpi_year", ano=ano)}
+                </div>
+                <div style="color: {BRITVIC_ACCENT}; font-size:2.1em; font-weight:bold; margin-bottom:7px;">
+                    {t("kpi_sum", qtd=int(row['sum']))}
+                </div>
+                <div style="font-size: 1.08em; color: {BRITVIC_PRIMARY}; margin-bottom:2px;">
+                    {t('kpi_daily_avg', media=row["mean"], accent=BRITVIC_ACCENT)}
+                </div>
+                <div style="font-size: 1em; color: #666;">{t('kpi_records', count=row['count'])}</div>
+            </div>
+            """, unsafe_allow_html=True
+        )
+    st.markdown("</div>", unsafe_allow_html=True)
+    return kpis
 
-if __name__ == "__main__":
-    main()
+exibe_kpis(df_filtrado, st.session_state["filtros"]["categoria"])
+
+# --------- GRÁFICOS ---------
+
+def plot_tendencia(df, categoria):
+    grupo = gerar_dataset_modelo(df, categoria)
+    if grupo.empty:
+        st.info(t("no_trend"))
+        return
+    fig = px.bar(
+        grupo, x='data', y='caixas_produzidas',
+        title=t("daily_trend", cat=categoria),
+        labels={
+            "data": t("data"), 
+            "caixas_produzidas": t("produced_boxes")
+        },
+        text_auto=True
+    )
+    fig.update_traces(marker_color=BRITVIC_ACCENT)
+    fig.update_layout(
+        template="plotly_white", 
+        hovermode="x",
+        title_font_color=BRITVIC_PRIMARY,
+        plot_bgcolor=BRITVIC_BG
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_variacao_mensal(df, categoria):
+    agrup = dataset_ano_mes(df, categoria)
+    mensal = agrup.groupby([agrup['data'].dt.to_period('M')])['caixas_produzidas'].sum().reset_index()
+    mensal['mes'] = mensal['data'].dt.strftime('%b/%Y')
+    mensal['var_%'] = mensal['caixas_produzidas'].pct_change() * 100
+    fig1 = px.bar(
+        mensal, x='mes', y='caixas_produzidas', text_auto=True,
+        title=t("monthly_total", cat=categoria),
+        labels={"mes":t("month_lbl"), "caixas_produzidas":t("produced_boxes")}
+    )
+    fig1.update_traces(marker_color=BRITVIC_ACCENT)
+    fig1.update_layout(template="plotly_white", title_font_color=BRITVIC_PRIMARY, plot_bgcolor=BRITVIC_BG)
+    fig2 = px.line(
+        mensal, x='mes', y='var_%', markers=True,
+        title=t("monthly_var", cat=categoria),
+        labels={"mes": t("month_lbl"), "var_%":t("variation")}
+    )
+    fig2.update_traces(line_color="#E67E22", marker=dict(size=7, color=BRITVIC_ACCENT))
+    fig2.update_layout(template="plotly_white", title_font_color=BRITVIC_PRIMARY, plot_bgcolor=BRITVIC_BG)
+    st.plotly_chart(fig1, use_container_width=True)
+    st.plotly_chart(fig2, use_container_width=True)
+
+def plot_sazonalidade(df, categoria):
+    agrup = dataset_ano_mes(df, categoria)
+    if agrup.empty:
+        st.info(t("no_trend"))
+        return
+    fig = px.box(
+        agrup, x='mes', y='caixas_produzidas', color=agrup['ano'].astype(str),
+        points='all', notched=True,
+        title=t("monthly_seasonal", cat=categoria),
+        labels={'mes': t("month_lbl"), "caixas_produzidas":t("prod")},
+        hover_data=["ano"], color_discrete_sequence=px.colors.sequential.Teal[::-1]
+    )
+    fig.update_layout(
+        xaxis=dict(
+            tickmode='array',
+            tickvals=list(range(1,13)),
+            ticktext=[nome_mes(m) for m in range(1,13)]
+        ),
+        template="plotly_white",
+        legend_title=t('year_lbl'),
+        title_font_color=BRITVIC_PRIMARY,
+        plot_bgcolor=BRITVIC_BG
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_comparativo_ano_mes(df, categoria):
+    agrup = dataset_ano_mes(df, categoria)
+    tab = agrup.groupby(['ano','mes'])['caixas_produzidas'].sum().reset_index()
+    tab['mes_nome'] = tab['mes'].apply(nome_mes)
+    tab = tab.sort_values(['mes'])
+    fig = go.Figure()
+    anos = sorted(tab['ano'].unique())
+    cores = px.colors.qualitative.Dark24
+    for idx, ano in enumerate(anos):
+        dados_ano = tab[tab['ano'] == ano]
+        fig.add_trace(go.Bar(
+            x=dados_ano['mes_nome'],
+            y=dados_ano['caixas_produzidas'],
+            name=str(ano),
+            text=dados_ano['caixas_produzidas'],
+            textposition='auto',
+            marker_color=cores[idx % len(cores)]
+        ))
+    fig.update_layout(
+        barmode='group',
+        title=t("monthly_comp", cat=categoria),
+        xaxis_title=t("month_lbl"),
+        yaxis_title=t("produced_boxes"),
+        legend_title=t("year_lbl"),
+        hovermode="x unified",
+        template="plotly_white",
+        title_font_color=BRITVIC_PRIMARY,
+        plot_bgcolor=BRITVIC_BG
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+def plot_comparativo_acumulado(df, categoria):
+    agrup = dataset_ano_mes(df, categoria)
+    res = agrup.groupby(['ano','mes'])['caixas_produzidas'].sum().reset_index()
+    res['acumulado'] = res.groupby('ano')['caixas_produzidas'].cumsum()
+    fig = px.line(
+        res, x='mes', y='acumulado', color=res['ano'].astype(str),
+        markers=True,
+        labels={'mes': t("month_lbl"), 'acumulado':t("accum_boxes"), 'ano':t("year_lbl")},
+        title=t("monthly_accum", cat=categoria),
+        color_discrete_sequence=px.colors.sequential.Teal[::-1]
+    )
+    fig.update_traces(mode="lines+markers")
+    fig.update_layout(
+        legend_title=t("year_lbl"),
+        xaxis=dict(
+            tickmode='array',
+            tickvals=list(range(1,13)),
+            ticktext=[nome_mes(m) for m in range(1,13)]
+        ),
+        hovermode="x unified",
+        template="plotly_white",
+        title_font_color=BRITVIC_PRIMARY,
+        plot_bgcolor=BRITVIC_BG
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+def rodar_previsao_prophet(df, categoria, meses_futuro=6):
+    dataset = gerar_dataset_modelo(df, categoria)
+    if dataset.shape[0] < 2:
+        return dataset, pd.DataFrame(), None
+    dados = dataset.rename(columns={'data':'ds', 'caixas_produzidas':'y'})
+    modelo = Prophet(yearly_seasonality=True, daily_seasonality=False)
+    modelo.fit(dados)
+    futuro = modelo.make_future_dataframe(periods=meses_futuro*30)
+    previsao = modelo.predict(futuro)
+    return dados, previsao, modelo
+
+def plot_previsao(dados_hist, previsao, categoria):
+    if previsao.empty:
+        st.info(t("no_forecast"))
+        return
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=dados_hist['ds'], y=dados_hist['y'],
+                             mode='lines+markers', name=t("historico"),
+                             line=dict(color=BRITVIC_PRIMARY, width=2),
+                             marker=dict(color=BRITVIC_ACCENT)))
+    fig.add_trace(go.Scatter(x=previsao['ds'], y=previsao['yhat'],
+                             mode='lines', name=t("forecast"), line=dict(color=BRITVIC_ACCENT, width=2)))
+    fig.add_trace(go.Scatter(x=previsao['ds'], y=previsao['yhat_upper'],
+                             line=dict(dash='dash', color='#AED6F1'), name='Upper', opacity=0.3))
+    fig.add_trace(go.Scatter(x=previsao['ds'], y=previsao['yhat_lower'],
+                             line=dict(dash='dash', color='#AED6F1'), name='Lower', opacity=0.3))
+    fig.update_layout(title=t("forecast", cat=categoria),
+                     xaxis_title=t("data"), yaxis_title=t("produced_boxes"),
+                     template="plotly_white", hovermode="x unified",
+                     title_font_color=BRITVIC_PRIMARY,
+                     plot_bgcolor=BRITVIC_BG)
+    st.plotly_chart(fig, use_container_width=True)
+
+def gerar_insights(df, categoria):
+    grupo = gerar_dataset_modelo(df, categoria)
+    tendencias = []
+    mensal = grupo.copy()
+    mensal['mes'] = mensal['data'].dt.to_period('M')
+    agg = mensal.groupby('mes')['caixas_produzidas'].sum()
+    if len(agg) > 6:
+        ultimos = min(3, len(agg))
+        if agg[-ultimos:].mean() > agg[:-ultimos].mean():
+            tendencias.append(t("recent_growth"))
+        elif agg[-ultimos:].mean() < agg[:-ultimos].mean():
+            tendencias.append(t("recent_fall"))
+    q1 = grupo['caixas_produzidas'].quantile(0.25)
+    q3 = grupo['caixas_produzidas'].quantile(0.75)
+    outliers = grupo[(grupo['caixas_produzidas'] < q1 - 1.5*(q3-q1)) | (grupo['caixas_produzidas'] > q3 + 1.5*(q3-q1))]
+    if not outliers.empty:
+        tendencias.append(t("outlier_days", num=outliers.shape[0]))
+    std = grupo['caixas_produzidas'].std()
+    mean = grupo['caixas_produzidas'].mean()
+    if mean > 0 and std/mean > 0.5:
+        tendencias.append(t("high_var"))
+    with st.expander(t("auto_insights"), expanded=True):
+        for text in tendencias:
+            st.info(text)
+        if not tendencias:
+            st.success(t("no_pattern"))
+
+def exportar_consolidado(df, previsao, categoria):
+    if previsao.empty:
+        st.warning(t("no_export"))
+        return
+    dados = gerar_dataset_modelo(df, categoria)
+    previsao_col = previsao[['ds', 'yhat']].rename(columns={'ds':'data', 'yhat':'previsao_caixas'})
+    base_export = dados.merge(previsao_col, left_on='data', right_on='data', how='outer').sort_values("data")
+    base_export['categoria'] = categoria
+    nome_arq = f'consolidado_{categoria.lower()}.xlsx'
+    return base_export, nome_arq
+
+# ---- Execução dos gráficos e análises ----
+plot_tendencia(df_filtrado, st.session_state["filtros"]["categoria"])
+plot_variacao_mensal(df_filtrado, st.session_state["filtros"]["categoria"])
+plot_sazonalidade(df_filtrado, st.session_state["filtros"]["categoria"])
+if len(set(df_filtrado['data'].dt.year)) > 1:
+    plot_comparativo_ano_mes(df_filtrado, st.session_state["filtros"]["categoria"])
+    plot_comparativo_acumulado(df_filtrado, st.session_state["filtros"]["categoria"])
+dados_hist, previsao, modelo_prophet = rodar_previsao_prophet(df_filtrado, st.session_state["filtros"]["categoria"], meses_futuro=6)
+plot_previsao(dados_hist, previsao, st.session_state["filtros"]["categoria"])
+gerar_insights(df_filtrado, st.session_state["filtros"]["categoria"])
+
+# --------- EXPORTAÇÃO ---------
+with st.expander(t("export")):
+    if st.button(t("export_with_fc"), help=t("export_with_fc")):
+        base_export, nome_arq = exportar_consolidado(df_filtrado, previsao, st.session_state["filtros"]["categoria"])
+        buffer = io.BytesIO()
+        base_export.to_excel(buffer, index=False, engine='openpyxl')
+        buffer.seek(0)
+        st.download_button(
+            label=t("download_file"),
+            data=buffer,
+            file_name=nome_arq,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
