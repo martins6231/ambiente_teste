@@ -1019,7 +1019,7 @@ with tab_export_tab:
         # Reordenar colunas para melhor visualização no Excel
         cols_order = [t('category_lbl'), 'data', t('produced_boxes')]
         if not previsao_export.empty:
-            cols_order.extend([t('forecast_boxes'), f"{t('forecast_boxes')} (Lower)", f"{t('forecast_boxes')} (Upper)""])
+            cols_order.extend([t('forecast_boxes'), f"{t('forecast_boxes')} (Lower)", f"{t('forecast_boxes')} (Upper)"])
         
         # Filtra colunas existentes para evitar erro se alguma não foi gerada
         cols_order = [col for col in cols_order if col in base_export.columns]
