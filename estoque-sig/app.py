@@ -1,532 +1,582 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import numpy as np
 from datetime import datetime
 import json
 import os
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # Configuração da página
 st.set_page_config(
-    page_title="Sistema de Controle de Estoque",
+    page_title="Sistema de Gestão de Estoque - SIG", 
     page_icon="📦",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="wide"
 )
 
-# Estilos CSS personalizados
-st.markdown("""
-    <style>
-    .main {
-        padding: 0rem 1rem;
-    }
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 24px;
-    }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        padding-left: 20px;
-        padding-right: 20px;
-        background-color: #f0f2f6;
-        border-radius: 10px;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #1f77b4;
-        color: white;
-    }
-    h1 {
-        color: #1f77b4;
-        font-family: 'Arial', sans-serif;
-    }
-    .metric-card {
-        background-color: #f0f2f6;
-        padding: 20px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .stButton > button {
-        width: 100%;
-        background-color: #1f77b4;
-        color: white;
-        border: none;
-        padding: 0.5rem 1rem;
-        border-radius: 5px;
-        font-weight: bold;
-    }
-    .stButton > button:hover {
-        background-color: #145a8b;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# Função para salvar dados
+def salvar_dados(df, df_historico):
+    """Salva os dataframes em arquivos locais"""
+    try:
+        # Salvar estoque
+        df.to_csv('estoque_atual.csv', index=False)
+        
+        # Salvar histórico
+        df_historico.to_csv('historico_movimentacoes.csv', index=False)
+        
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar dados: {str(e)}")
+        return False
 
-# Inicialização do session state
+# Função para carregar dados
+def carregar_dados():
+    """Carrega os dados salvos ou cria novos"""
+    try:
+        # Tentar carregar estoque
+        if os.path.exists('estoque_atual.csv'):
+            df = pd.read_csv('estoque_atual.csv')
+        else:
+            # Se não existir, criar DataFrame vazio com as colunas corretas
+            df = pd.DataFrame(columns=[
+                'CÓDIGO BM', 'DISCRIMINAÇÃO DOS MATERIAIS', 
+                'UNIDADE', 'QUANTIDADE', 'PREÇO UNITÁRIO'
+            ])
+        
+        # Tentar carregar histórico
+        if os.path.exists('historico_movimentacoes.csv'):
+            df_historico = pd.read_csv('historico_movimentacoes.csv')
+        else:
+            df_historico = pd.DataFrame(columns=[
+                'Data', 'Hora', 'Tipo', 'CÓDIGO BM', 'DISCRIMINAÇÃO DOS MATERIAIS',
+                'Quantidade', 'Valor Total', 'Responsável', 'Observações'
+            ])
+        
+        return df, df_historico
+    except Exception as e:
+        st.error(f"Erro ao carregar dados: {str(e)}")
+        # Retornar DataFrames vazios em caso de erro
+        df = pd.DataFrame(columns=[
+            'CÓDIGO BM', 'DISCRIMINAÇÃO DOS MATERIAIS', 
+            'UNIDADE', 'QUANTIDADE', 'PREÇO UNITÁRIO'
+        ])
+        df_historico = pd.DataFrame(columns=[
+            'Data', 'Hora', 'Tipo', 'CÓDIGO BM', 'DISCRIMINAÇÃO DOS MATERIAIS',
+            'Quantidade', 'Valor Total', 'Responsável', 'Observações'
+        ])
+        return df, df_historico
+
+# Inicializar session state
 if 'df' not in st.session_state:
-    st.session_state.df = None
-if 'historico_movimentacoes' not in st.session_state:
-    st.session_state.historico_movimentacoes = []
+    df, df_historico = carregar_dados()
+    st.session_state.df = df
+    st.session_state.historico_movimentacoes = df_historico
 
-# Funções auxiliares
+# Garantir que as colunas existam e tenham tipos corretos
+if not st.session_state.df.empty:
+    # Garantir tipos numéricos
+    st.session_state.df['QUANTIDADE'] = pd.to_numeric(st.session_state.df['QUANTIDADE'], errors='coerce').fillna(0)
+    st.session_state.df['PREÇO UNITÁRIO'] = pd.to_numeric(st.session_state.df['PREÇO UNITÁRIO'], errors='coerce').fillna(0)
+    
+    # Criar coluna de valor total se não existir
+    st.session_state.df['VALOR TOTAL'] = st.session_state.df['QUANTIDADE'] * st.session_state.df['PREÇO UNITÁRIO']
+
+# Função para formatar moeda
 def formatar_moeda(valor):
     """Formata valor para moeda brasileira"""
     return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-def salvar_dados():
-    """Salva os dados em um arquivo local"""
-    if st.session_state.df is not None:
-        # Salva o DataFrame
-        st.session_state.df.to_csv('estoque_backup.csv', index=False)
-        
-        # Salva o histórico
-        with open('historico_backup.json', 'w') as f:
-            json.dump(st.session_state.historico_movimentacoes, f)
+# Função para buscar peça por código
+def buscar_peca_por_codigo(codigo):
+    """Busca uma peça pelo código BM"""
+    df = st.session_state.df
+    # Converter para string para comparação
+    df['CÓDIGO BM'] = df['CÓDIGO BM'].astype(str)
+    codigo = str(codigo).strip()
+    
+    resultado = df[df['CÓDIGO BM'] == codigo]
+    
+    if not resultado.empty:
+        return resultado.iloc[0]
+    return None
 
-def carregar_dados_salvos():
-    """Carrega dados salvos se existirem"""
-    if os.path.exists('estoque_backup.csv'):
-        st.session_state.df = pd.read_csv('estoque_backup.csv')
-        
-    if os.path.exists('historico_backup.json'):
-        with open('historico_backup.json', 'r') as f:
-            st.session_state.historico_movimentacoes = json.load(f)
-
-def registrar_movimentacao(tipo, codigo_bm, descricao, quantidade, motivo=""):
+# Função para registrar movimentação
+def registrar_movimentacao(tipo, codigo, discriminacao, quantidade, valor_total, responsavel, observacoes=""):
     """Registra uma movimentação no histórico"""
-    movimentacao = {
-        "data": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-        "tipo": tipo,
-        "codigo_bm": codigo_bm,
-        "descricao": descricao,
-        "quantidade": quantidade,
-        "motivo": motivo
-    }
-    st.session_state.historico_movimentacoes.append(movimentacao)
-    salvar_dados()
+    nova_movimentacao = pd.DataFrame({
+        'Data': [datetime.now().strftime('%d/%m/%Y')],
+        'Hora': [datetime.now().strftime('%H:%M:%S')],
+        'Tipo': [tipo],
+        'CÓDIGO BM': [codigo],
+        'DISCRIMINAÇÃO DOS MATERIAIS': [discriminacao],
+        'Quantidade': [quantidade],
+        'Valor Total': [valor_total],
+        'Responsável': [responsavel],
+        'Observações': [observacoes]
+    })
+    
+    st.session_state.historico_movimentacoes = pd.concat(
+        [st.session_state.historico_movimentacoes, nova_movimentacao], 
+        ignore_index=True
+    )
 
 # Título principal
-st.title("📦 Sistema de Controle de Estoque")
+st.title("📦 Sistema de Gestão de Estoque - SIG")
+st.markdown("---")
 
-# Sidebar para upload de arquivo
-with st.sidebar:
-    st.header("📤 Upload de Dados")
-    
-    uploaded_file = st.file_uploader(
-        "Selecione o arquivo Excel",
-        type=['xlsx', 'xls'],
-        help="Faça upload do arquivo de estoque"
-    )
-    
-    if uploaded_file is not None:
-        try:
-            st.session_state.df = pd.read_excel(uploaded_file)
-            st.success("✅ Arquivo carregado com sucesso!")
-        except Exception as e:
-            st.error(f"❌ Erro ao carregar arquivo: {str(e)}")
-    
-    # Tentar carregar dados salvos
-    elif st.session_state.df is None:
-        carregar_dados_salvos()
-        if st.session_state.df is not None:
-            st.info("📁 Dados anteriores carregados")
-
-# Verifica se há dados carregados
-if st.session_state.df is None:
-    st.warning("⚠️ Por favor, faça upload do arquivo Excel na barra lateral.")
-    st.stop()
-
-# Preparar dados
-df = st.session_state.df.copy()
-
-# Criar abas
+# Abas principais
 tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "📊 Dashboard", 
-    "📋 Estoque Atual", 
-    "🔍 Buscar Peça",
-    "➕ Cadastrar Peça",
-    "➖ Registrar Saída",
-    "📜 Histórico"
+    "📊 Dashboard", "🔍 Buscar Peça", "➕ Cadastrar Peça", 
+    "📤 Registrar Saída", "📈 Análise ABC", "📜 Histórico"
 ])
 
-# Tab 1 - Dashboard
+# Tab 1: Dashboard
 with tab1:
     st.subheader("📊 Visão Geral do Estoque")
     
-    # Métricas principais
-    col1, col2, col3, col4 = st.columns(4)
+    # Verificar se há dados
+    df = st.session_state.df
     
-    with col1:
-        total_itens = len(df)
-        st.metric("Total de Itens", f"{total_itens:,}".replace(",", "."))
-    
-    with col2:
-        valor_total = df['TOTAL R$ ESTOQUE'].sum()
-        st.metric("Valor Total", formatar_moeda(valor_total))
-    
-    with col3:
-        qtd_total = df['QUANTIDADE'].sum()
-        st.metric("Quantidade Total", f"{int(qtd_total):,}".replace(",", "."))
-    
-    with col4:
-        valor_medio = valor_total / total_itens if total_itens > 0 else 0
-        st.metric("Valor Médio/Item", formatar_moeda(valor_medio))
-    
-    st.markdown("---")
-    
-    # Gráficos
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Top 10 peças por valor
-        top_pecas = df.nlargest(10, 'TOTAL R$ ESTOQUE')
-        fig_top = px.bar(
-            top_pecas, 
-            x='TOTAL R$ ESTOQUE', 
-            y='DESCRICAO DO MATERIAL',
-            orientation='h',
-            title='Top 10 Peças por Valor em Estoque',
-            labels={'TOTAL R$ ESTOQUE': 'Valor Total (R$)', 'DESCRICAO DO MATERIAL': 'Descrição'}
-        )
-        fig_top.update_layout(height=400)
-        st.plotly_chart(fig_top, use_container_width=True)
-    
-    with col2:
-        # Análise ABC
-        df_abc = df.sort_values('TOTAL R$ ESTOQUE', ascending=False).copy()
-        df_abc['percentual_valor'] = (df_abc['TOTAL R$ ESTOQUE'] / df_abc['TOTAL R$ ESTOQUE'].sum() * 100)
-        df_abc['percentual_acumulado'] = df_abc['percentual_valor'].cumsum()
-        df_abc['percentual_itens'] = (np.arange(1, len(df_abc) + 1) / len(df_abc) * 100)
+    if df.empty:
+        st.warning("⚠️ Nenhum item cadastrado no estoque. Faça o upload de uma planilha ou cadastre novos itens.")
+    else:
+        # Métricas principais
+        col1, col2, col3, col4 = st.columns(4)
         
-        # Classificação ABC
-        df_abc['classificacao'] = pd.cut(
-            df_abc['percentual_acumulado'],
-            bins=[0, 80, 95, 100],
-            labels=['A', 'B', 'C']
-        )
+        with col1:
+            total_itens = len(df)
+            st.metric("Total de Itens", f"{total_itens:,}".replace(",", "."))
         
-        # Contagem por classe
-        abc_count = df_abc['classificacao'].value_counts().sort_index()
+        with col2:
+            # Calcular valor total baseado nas colunas existentes
+            if 'VALOR TOTAL' in df.columns:
+                valor_total = df['VALOR TOTAL'].sum()
+            else:
+                valor_total = (df['QUANTIDADE'] * df['PREÇO UNITÁRIO']).sum()
+            st.metric("Valor Total", formatar_moeda(valor_total))
         
-        fig_abc = px.pie(
-            values=abc_count.values,
-            names=abc_count.index,
-            title='Classificação ABC do Estoque',
-            color_discrete_map={'A': '#ff4444', 'B': '#ffaa00', 'C': '#00aa00'}
-        )
-        fig_abc.update_layout(height=400)
-        st.plotly_chart(fig_abc, use_container_width=True)
-    
-    # Curva ABC
-    st.subheader("📈 Curva ABC - Análise de Pareto")
-    
-    fig_pareto = go.Figure()
-    
-    # Linha de valor acumulado
-    fig_pareto.add_trace(go.Scatter(
-        x=df_abc['percentual_itens'],
-        y=df_abc['percentual_acumulado'],
-        mode='lines',
-        name='Valor Acumulado (%)',
-        line=dict(color='blue', width=3)
-    ))
-    
-    # Linhas de referência
-    fig_pareto.add_hline(y=80, line_dash="dash", line_color="red", annotation_text="Classe A (80%)")
-    fig_pareto.add_hline(y=95, line_dash="dash", line_color="orange", annotation_text="Classe B (95%)")
-    
-    fig_pareto.update_layout(
-        title='Curva ABC - Percentual de Itens vs Valor Acumulado',
-        xaxis_title='Percentual de Itens (%)',
-        yaxis_title='Percentual do Valor Acumulado (%)',
-        height=500,
-        showlegend=True
-    )
-    
-    st.plotly_chart(fig_pareto, use_container_width=True)
+        with col3:
+            # Itens com estoque baixo (menos de 10 unidades)
+            itens_baixo = len(df[df['QUANTIDADE'] < 10])
+            st.metric("Itens com Estoque Baixo", itens_baixo, delta=f"-{itens_baixo}")
+        
+        with col4:
+            # Valor médio por item
+            valor_medio = valor_total / total_itens if total_itens > 0 else 0
+            st.metric("Valor Médio/Item", formatar_moeda(valor_medio))
+        
+        # Gráficos
+        st.markdown("---")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Top 10 itens por valor
+            df_top_valor = df.nlargest(10, 'VALOR TOTAL' if 'VALOR TOTAL' in df.columns else 'PREÇO UNITÁRIO')
+            fig_valor = px.bar(
+                df_top_valor, 
+                x='DISCRIMINAÇÃO DOS MATERIAIS', 
+                y='VALOR TOTAL' if 'VALOR TOTAL' in df.columns else 'PREÇO UNITÁRIO',
+                title="Top 10 Itens por Valor Total",
+                labels={'y': 'Valor (R$)', 'x': 'Item'}
+            )
+            fig_valor.update_layout(xaxis_tickangle=-45, height=400)
+            st.plotly_chart(fig_valor, use_container_width=True)
+        
+        with col2:
+            # Distribuição por unidade
+            dist_unidade = df.groupby('UNIDADE').size().reset_index(name='Quantidade')
+            fig_unidade = px.pie(
+                dist_unidade, 
+                values='Quantidade', 
+                names='UNIDADE',
+                title="Distribuição por Unidade"
+            )
+            fig_unidade.update_layout(height=400)
+            st.plotly_chart(fig_unidade, use_container_width=True)
+        
+        # Tabela com itens de estoque baixo
+        st.markdown("---")
+        st.subheader("⚠️ Itens com Estoque Baixo (< 10 unidades)")
+        
+        df_baixo = df[df['QUANTIDADE'] < 10].sort_values('QUANTIDADE')
+        if not df_baixo.empty:
+            st.dataframe(
+                df_baixo[['CÓDIGO BM', 'DISCRIMINAÇÃO DOS MATERIAIS', 'QUANTIDADE', 'UNIDADE']],
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("✅ Todos os itens estão com estoque adequado!")
 
-# Tab 2 - Estoque Atual
+# Tab 2: Buscar Peça
 with tab2:
-    st.subheader("📋 Listagem Completa do Estoque")
-    
-    # Filtros
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        filtro_descricao = st.text_input("🔍 Filtrar por Descrição", "")
-    
-    with col2:
-        filtro_codigo = st.text_input("🔍 Filtrar por Código BM", "")
-    
-    with col3:
-        min_valor = st.number_input("Valor Mínimo (R$)", min_value=0.0, value=0.0)
-    
-    # Aplicar filtros
-    df_filtrado = df.copy()
-    
-    if filtro_descricao:
-        df_filtrado = df_filtrado[df_filtrado['DESCRICAO DO MATERIAL'].str.contains(filtro_descricao, case=False, na=False)]
-    
-    if filtro_codigo:
-        df_filtrado = df_filtrado[df_filtrado['CODIGO BM'].astype(str).str.contains(filtro_codigo, na=False)]
-    
-    if min_valor > 0:
-        df_filtrado = df_filtrado[df_filtrado['TOTAL R$ ESTOQUE'] >= min_valor]
-    
-    # Exibir dados
-    st.write(f"**Total de itens encontrados:** {len(df_filtrado)}")
-    
-    # Formatar colunas monetárias
-    df_display = df_filtrado.copy()
-    df_display['CUSTO UNIT'] = df_display['CUSTO UNIT'].apply(formatar_moeda)
-    df_display['TOTAL R$ ESTOQUE'] = df_display['TOTAL R$ ESTOQUE'].apply(formatar_moeda)
-    
-    st.dataframe(df_display, use_container_width=True, height=600)
-    
-    # Download
-    csv = df_filtrado.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="📥 Baixar dados filtrados (CSV)",
-        data=csv,
-        file_name=f'estoque_filtrado_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
-        mime='text/csv'
-    )
-
-# Tab 3 - Buscar Peça
-with tab3:
     st.subheader("🔍 Buscar Peça por Código")
     
-    col1, col2 = st.columns([2, 1])
+    col1, col2 = st.columns([1, 2])
     
     with col1:
-        codigo_busca = st.text_input("Digite o Código BM da peça:", key="busca_codigo")
+        codigo_busca = st.text_input("Digite o Código BM:", placeholder="Ex: 123456")
+        buscar_btn = st.button("🔍 Buscar", type="primary", use_container_width=True)
     
-    with col2:
-        st.write("")  # Espaçamento
-        st.write("")  # Espaçamento
-        buscar = st.button("🔍 Buscar", type="primary")
-    
-    if buscar and codigo_busca:
-        # Buscar a peça
-        peca = df[df['CODIGO BM'].astype(str) == str(codigo_busca)]
+    if buscar_btn and codigo_busca:
+        peca = buscar_peca_por_codigo(codigo_busca)
         
-        if not peca.empty:
-            st.success("✅ Peça encontrada!")
+        if peca is not None:
+            st.success(f"✅ Peça encontrada!")
             
             # Exibir informações da peça
-            peca_info = peca.iloc[0]
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("### 📦 Informações da Peça")
-                st.write(f"**Código BM:** {peca_info['CODIGO BM']}")
-                st.write(f"**Descrição:** {peca_info['DESCRICAO DO MATERIAL']}")
-                st.write(f"**Quantidade em Estoque:** {int(peca_info['QUANTIDADE'])}")
-            
-            with col2:
-                st.markdown("### 💰 Valores")
-                st.write(f"**Custo Unitário:** {formatar_moeda(peca_info['CUSTO UNIT'])}")
-                st.write(f"**Valor Total:** {formatar_moeda(peca_info['TOTAL R$ ESTOQUE'])}")
-            
-            # Opções de ação
-            st.markdown("---")
-            st.markdown("### ⚡ Ações Rápidas")
-            
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                if st.button("➖ Registrar Saída", key=f"saida_{codigo_busca}"):
-                    st.session_state['tab_selecionada'] = 4
-                    st.session_state['codigo_preenchido'] = str(codigo_busca)
-                    st.rerun()
+                st.metric("Código BM", peca['CÓDIGO BM'])
+                st.metric("Unidade", peca['UNIDADE'])
             
             with col2:
-                if st.button("📊 Ver Histórico", key=f"hist_{codigo_busca}"):
-                    st.session_state['tab_selecionada'] = 5
-                    st.session_state['filtro_historico'] = str(codigo_busca)
-                    st.rerun()
+                st.metric("Quantidade", f"{int(peca['QUANTIDADE']):,}".replace(",", "."))
+                st.metric("Preço Unitário", formatar_moeda(peca['PREÇO UNITÁRIO']))
+            
+            with col3:
+                valor_total = peca['QUANTIDADE'] * peca['PREÇO UNITÁRIO']
+                st.metric("Valor Total", formatar_moeda(valor_total))
+                
+                # Indicador de estoque
+                if peca['QUANTIDADE'] < 10:
+                    st.error("⚠️ Estoque Baixo!")
+                elif peca['QUANTIDADE'] < 50:
+                    st.warning("📊 Estoque Médio")
+                else:
+                    st.success("✅ Estoque Adequado")
+            
+            # Descrição
+            st.markdown("---")
+            st.markdown("**Descrição do Material:**")
+            st.info(peca['DISCRIMINAÇÃO DOS MATERIAIS'])
+            
         else:
-            st.error(f"❌ Nenhuma peça encontrada com o código: {codigo_busca}")
+            st.error(f"❌ Peça com código '{codigo_busca}' não encontrada!")
 
-# Tab 4 - Cadastrar Peça
-with tab4:
+# Tab 3: Cadastrar Peça
+with tab3:
     st.subheader("➕ Cadastrar Nova Peça")
     
     with st.form("form_cadastro"):
         col1, col2 = st.columns(2)
         
         with col1:
-            novo_codigo = st.text_input("Código BM*", key="novo_codigo")
-            nova_descricao = st.text_area("Descrição do Material*", key="nova_descricao", height=100)
-            nova_quantidade = st.number_input("Quantidade*", min_value=0, value=0, key="nova_quantidade")
+            codigo = st.text_input("Código BM*", placeholder="Ex: 123456")
+            discriminacao = st.text_area("Descrição do Material*", placeholder="Descreva o material...")
+            unidade = st.selectbox("Unidade*", ["UN", "PC", "CX", "KG", "M", "L", "PAR", "JG", "ROLO"])
         
         with col2:
-            novo_custo = st.number_input("Custo Unitário (R$)*", min_value=0.0, value=0.0, format="%.2f", key="novo_custo")
-            st.write("")  # Espaçamento
-            valor_total = nova_quantidade * novo_custo
-            st.metric("Valor Total", formatar_moeda(valor_total))
+            quantidade = st.number_input("Quantidade*", min_value=0, value=0, step=1)
+            preco = st.number_input("Preço Unitário (R$)*", min_value=0.0, value=0.0, step=0.01, format="%.2f")
+            responsavel = st.text_input("Responsável pelo Cadastro*", placeholder="Nome do responsável")
         
-        submitted = st.form_submit_button("✅ Cadastrar Peça", type="primary")
+        observacoes = st.text_area("Observações", placeholder="Observações adicionais (opcional)")
+        
+        submitted = st.form_submit_button("💾 Cadastrar Peça", type="primary", use_container_width=True)
         
         if submitted:
             # Validações
-            if not novo_codigo or not nova_descricao:
-                st.error("❌ Preencha todos os campos obrigatórios!")
-            elif novo_codigo in df['CODIGO BM'].astype(str).values:
-                st.error(f"❌ Já existe uma peça com o código {novo_codigo}!")
+            if not all([codigo, discriminacao, responsavel]):
+                st.error("❌ Por favor, preencha todos os campos obrigatórios!")
+            elif buscar_peca_por_codigo(codigo) is not None:
+                st.error(f"❌ Já existe uma peça com o código {codigo}!")
             else:
                 # Adicionar nova peça
                 nova_peca = pd.DataFrame({
-                    'CODIGO BM': [novo_codigo],
-                    'DESCRICAO DO MATERIAL': [nova_descricao],
-                    'QUANTIDADE': [nova_quantidade],
-                    'CUSTO UNIT': [novo_custo],
-                    'TOTAL R$ ESTOQUE': [valor_total]
+                    'CÓDIGO BM': [codigo],
+                    'DISCRIMINAÇÃO DOS MATERIAIS': [discriminacao],
+                    'UNIDADE': [unidade],
+                    'QUANTIDADE': [quantidade],
+                    'PREÇO UNITÁRIO': [preco],
+                    'VALOR TOTAL': [quantidade * preco]
                 })
                 
                 st.session_state.df = pd.concat([st.session_state.df, nova_peca], ignore_index=True)
                 
                 # Registrar no histórico
                 registrar_movimentacao(
-                    tipo="ENTRADA",
-                    codigo_bm=novo_codigo,
-                    descricao=nova_descricao,
-                    quantidade=nova_quantidade,
-                    motivo="Cadastro inicial"
+                    "Entrada - Cadastro",
+                    codigo,
+                    discriminacao,
+                    quantidade,
+                    quantidade * preco,
+                    responsavel,
+                    observacoes
                 )
                 
-                salvar_dados()
-                st.success(f"✅ Peça {novo_codigo} cadastrada com sucesso!")
-                st.rerun()
+                # Salvar dados
+                salvar_dados(st.session_state.df, st.session_state.historico_movimentacoes)
+                
+                st.success(f"✅ Peça {codigo} cadastrada com sucesso!")
+                st.balloons()
 
-# Tab 5 - Registrar Saída
-with tab5:
-    st.subheader("➖ Registrar Saída de Estoque")
+# Tab 4: Registrar Saída
+with tab4:
+    st.subheader("📤 Registrar Saída de Material")
     
-    # Verificar se há código preenchido
-    codigo_preenchido = st.session_state.get('codigo_preenchido', '')
+    col1, col2 = st.columns([1, 2])
     
-    with st.form("form_saida"):
-        col1, col2 = st.columns(2)
+    with col1:
+        codigo_saida = st.text_input("Código BM da Peça:", placeholder="Ex: 123456", key="cod_saida")
+        verificar_btn = st.button("🔍 Verificar Disponibilidade", use_container_width=True)
+    
+    if verificar_btn and codigo_saida:
+        peca = buscar_peca_por_codigo(codigo_saida)
         
-        with col1:
-            codigo_saida = st.text_input("Código BM da Peça*", value=codigo_preenchido, key="codigo_saida")
+        if peca is not None:
+            st.success("✅ Peça encontrada!")
             
-            # Buscar informações da peça
-            if codigo_saida:
-                peca = df[df['CODIGO BM'].astype(str) == str(codigo_saida)]
-                if not peca.empty:
-                    peca_info = peca.iloc[0]
-                    st.info(f"📦 {peca_info['DESCRICAO DO MATERIAL']}")
-                    st.write(f"**Estoque Atual:** {int(peca_info['QUANTIDADE'])} unidades")
-                    max_qtd = int(peca_info['QUANTIDADE'])
-                else:
-                    st.warning("⚠️ Peça não encontrada")
-                    max_qtd = 0
-            else:
-                max_qtd = 0
-        
-        with col2:
-            qtd_saida = st.number_input("Quantidade a Retirar*", min_value=0, max_value=max_qtd, value=0, key="qtd_saida")
-            motivo_saida = st.text_area("Motivo/Observações", key="motivo_saida", height=100)
-        
-        submitted = st.form_submit_button("📤 Registrar Saída", type="primary")
-        
-        if submitted:
-            if not codigo_saida or qtd_saida == 0:
-                st.error("❌ Preencha todos os campos obrigatórios!")
-            elif codigo_saida not in df['CODIGO BM'].astype(str).values:
-                st.error("❌ Código BM não encontrado!")
-            else:
-                # Atualizar quantidade
-                idx = df[df['CODIGO BM'].astype(str) == str(codigo_saida)].index[0]
-                df.loc[idx, 'QUANTIDADE'] -= qtd_saida
-                df.loc[idx, 'TOTAL R$ ESTOQUE'] = df.loc[idx, 'QUANTIDADE'] * df.loc[idx, 'CUSTO UNIT']
+            # Mostrar informações da peça
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.info(f"**Material:** {peca['DISCRIMINAÇÃO DOS MATERIAIS']}")
+            with col2:
+                st.info(f"**Quantidade Disponível:** {int(peca['QUANTIDADE'])}")
+            with col3:
+                st.info(f"**Unidade:** {peca['UNIDADE']}")
+            
+            # Formulário de saída
+            with st.form("form_saida"):
+                col1, col2 = st.columns(2)
                 
-                st.session_state.df = df
+                with col1:
+                    quantidade_saida = st.number_input(
+                        "Quantidade a Retirar*", 
+                        min_value=1, 
+                        max_value=int(peca['QUANTIDADE']),
+                        value=1
+                    )
+                    responsavel_saida = st.text_input("Responsável pela Retirada*", placeholder="Nome do responsável")
                 
-                # Registrar no histórico
-                registrar_movimentacao(
-                    tipo="SAÍDA",
-                    codigo_bm=codigo_saida,
-                    descricao=peca_info['DESCRICAO DO MATERIAL'],
-                    quantidade=qtd_saida,
-                    motivo=motivo_saida
-                )
+                with col2:
+                    destino = st.text_input("Destino/Setor*", placeholder="Ex: Produção, Manutenção...")
+                    documento = st.text_input("Nº Documento/OS", placeholder="Opcional")
                 
-                salvar_dados()
-                st.success(f"✅ Saída de {qtd_saida} unidades registrada com sucesso!")
+                obs_saida = st.text_area("Observações", placeholder="Motivo da retirada, observações...")
                 
-                # Limpar código preenchido
-                if 'codigo_preenchido' in st.session_state:
-                    del st.session_state['codigo_preenchido']
+                confirmar_saida = st.form_submit_button("📤 Confirmar Saída", type="primary", use_container_width=True)
                 
-                st.rerun()
+                if confirmar_saida:
+                    if not all([responsavel_saida, destino]):
+                        st.error("❌ Preencha todos os campos obrigatórios!")
+                    else:
+                        # Atualizar quantidade no estoque
+                        idx = st.session_state.df[st.session_state.df['CÓDIGO BM'].astype(str) == str(codigo_saida)].index[0]
+                        st.session_state.df.loc[idx, 'QUANTIDADE'] -= quantidade_saida
+                        
+                        # Recalcular valor total
+                        st.session_state.df.loc[idx, 'VALOR TOTAL'] = (
+                            st.session_state.df.loc[idx, 'QUANTIDADE'] * 
+                            st.session_state.df.loc[idx, 'PREÇO UNITÁRIO']
+                        )
+                        
+                        # Registrar movimentação
+                        valor_saida = quantidade_saida * peca['PREÇO UNITÁRIO']
+                        obs_completa = f"Destino: {destino}. Doc: {documento}. {obs_saida}" if documento else f"Destino: {destino}. {obs_saida}"
+                        
+                        registrar_movimentacao(
+                            "Saída",
+                            codigo_saida,
+                            peca['DISCRIMINAÇÃO DOS MATERIAIS'],
+                            quantidade_saida,
+                            valor_saida,
+                            responsavel_saida,
+                            obs_completa
+                        )
+                        
+                        # Salvar dados
+                        salvar_dados(st.session_state.df, st.session_state.historico_movimentacoes)
+                        
+                        st.success(f"✅ Saída registrada com sucesso! Quantidade retirada: {quantidade_saida}")
+                        st.info(f"📊 Nova quantidade em estoque: {int(st.session_state.df.loc[idx, 'QUANTIDADE'])}")
+        else:
+            st.error(f"❌ Peça com código '{codigo_saida}' não encontrada!")
 
-# Tab 6 - Histórico
+# Tab 5: Análise ABC
+with tab5:
+    st.subheader("📈 Análise ABC do Estoque")
+    
+    df = st.session_state.df
+    
+    if df.empty:
+        st.warning("⚠️ Nenhum item no estoque para análise.")
+    else:
+        # Calcular valor total se não existir
+        if 'VALOR TOTAL' not in df.columns:
+            df['VALOR TOTAL'] = df['QUANTIDADE'] * df['PREÇO UNITÁRIO']
+        
+        # Ordenar por valor total
+        df_abc = df.sort_values('VALOR TOTAL', ascending=False).copy()
+        
+        # Calcular percentuais acumulados
+        valor_total = df_abc['VALOR TOTAL'].sum()
+        df_abc['% Valor'] = (df_abc['VALOR TOTAL'] / valor_total * 100).round(2)
+        df_abc['% Acumulado'] = df_abc['% Valor'].cumsum()
+        
+        # Classificar ABC
+        def classificar_abc(percentual):
+            if percentual <= 80:
+                return 'A'
+            elif percentual <= 95:
+                return 'B'
+            else:
+                return 'C'
+        
+        df_abc['Classe ABC'] = df_abc['% Acumulado'].apply(classificar_abc)
+        
+        # Métricas por classe
+        col1, col2, col3 = st.columns(3)
+        
+        for col, classe in zip([col1, col2, col3], ['A', 'B', 'C']):
+            with col:
+                qtd = len(df_abc[df_abc['Classe ABC'] == classe])
+                valor = df_abc[df_abc['Classe ABC'] == classe]['VALOR TOTAL'].sum()
+                perc = (valor / valor_total * 100) if valor_total > 0 else 0
+                
+                st.metric(
+                    f"Classe {classe}",
+                    f"{qtd} itens",
+                    f"{perc:.1f}% do valor"
+                )
+        
+        # Gráfico de Pareto
+        fig = make_subplots(
+            specs=[[{"secondary_y": True}]],
+            subplot_titles=["Análise ABC - Curva de Pareto"]
+        )
+        
+        # Barras de valor
+        fig.add_trace(
+            go.Bar(
+                x=df_abc.index[:20],  # Top 20 itens
+                y=df_abc['VALOR TOTAL'][:20],
+                name="Valor Total",
+                marker_color=['#FF6B6B' if c == 'A' else '#4ECDC4' if c == 'B' else '#95E1D3' 
+                              for c in df_abc['Classe ABC'][:20]]
+            ),
+            secondary_y=False
+        )
+        
+        # Linha de percentual acumulado
+        fig.add_trace(
+            go.Scatter(
+                x=df_abc.index[:20],
+                y=df_abc['% Acumulado'][:20],
+                name="% Acumulado",
+                line=dict(color='#2E86AB', width=3),
+                mode='lines+markers'
+            ),
+            secondary_y=True
+        )
+        
+        fig.update_xaxes(title_text="Itens (Top 20)")
+        fig.update_yaxes(title_text="Valor Total (R$)", secondary_y=False)
+        fig.update_yaxes(title_text="% Acumulado", secondary_y=True)
+        fig.update_layout(height=500, hovermode='x unified')
+        
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Tabela com classificação
+        st.markdown("---")
+        st.subheader("📋 Classificação Detalhada")
+        
+        # Filtro por classe
+        classe_filtro = st.multiselect(
+            "Filtrar por Classe:",
+            ['A', 'B', 'C'],
+            default=['A', 'B', 'C']
+        )
+        
+        df_filtrado = df_abc[df_abc['Classe ABC'].isin(classe_filtro)]
+        
+        # Exibir tabela
+        st.dataframe(
+            df_filtrado[['CÓDIGO BM', 'DISCRIMINAÇÃO DOS MATERIAIS', 'QUANTIDADE', 
+                         'PREÇO UNITÁRIO', 'VALOR TOTAL', '% Valor', '% Acumulado', 'Classe ABC']],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                'PREÇO UNITÁRIO': st.column_config.NumberColumn(format="R$ %.2f"),
+                'VALOR TOTAL': st.column_config.NumberColumn(format="R$ %.2f"),
+                '% Valor': st.column_config.NumberColumn(format="%.2f%%"),
+                '% Acumulado': st.column_config.NumberColumn(format="%.2f%%")
+            }
+        )
+
+# Tab 6: Histórico
 with tab6:
     st.subheader("📜 Histórico de Movimentações")
     
-    if len(st.session_state.historico_movimentacoes) > 0:
-        df_historico = pd.DataFrame(st.session_state.historico_movimentacoes)
+    if st.session_state.historico_movimentacoes.empty:
+        st.info("📭 Nenhuma movimentação registrada ainda.")
+    else:
+        df_historico = st.session_state.historico_movimentacoes
         
         # Filtros
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            filtro_tipo = st.selectbox("Tipo de Movimentação", ["Todos", "ENTRADA", "SAÍDA"])
+            tipo_filtro = st.multiselect(
+                "Tipo de Movimentação:",
+                df_historico['Tipo'].unique(),
+                default=df_historico['Tipo'].unique()
+            )
         
         with col2:
-            filtro_codigo_hist = st.text_input("Filtrar por Código BM", value=st.session_state.get('filtro_historico', ''))
+            if 'Data' in df_historico.columns:
+                datas = pd.to_datetime(df_historico['Data'], format='%d/%m/%Y', errors='coerce')
+                data_min = datas.min()
+                data_max = datas.max()
+                
+                if pd.notna(data_min) and pd.notna(data_max):
+                    data_inicio = st.date_input("Data Inicial:", value=data_min)
+                    data_fim = st.date_input("Data Final:", value=data_max)
         
         with col3:
-            ordem = st.selectbox("Ordenar por", ["Mais recente", "Mais antigo"])
+            codigo_filtro = st.text_input("Filtrar por Código BM:", placeholder="Deixe vazio para todos")
         
         # Aplicar filtros
-        df_hist_filtrado = df_historico.copy()
+        df_filtrado = df_historico[df_historico['Tipo'].isin(tipo_filtro)]
         
-        if filtro_tipo != "Todos":
-            df_hist_filtrado = df_hist_filtrado[df_hist_filtrado['tipo'] == filtro_tipo]
+        if codigo_filtro:
+            df_filtrado = df_filtrado[df_filtrado['CÓDIGO BM'].astype(str).str.contains(str(codigo_filtro), case=False)]
         
-        if filtro_codigo_hist:
-            df_hist_filtrado = df_hist_filtrado[df_hist_filtrado['codigo_bm'].astype(str).str.contains(filtro_codigo_hist, na=False)]
+        # Exibir histórico
+        st.dataframe(
+            df_filtrado.sort_values(['Data', 'Hora'], ascending=False),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                'Valor Total': st.column_config.NumberColumn(format="R$ %.2f")
+            }
+        )
         
-        # Ordenar
-        df_hist_filtrado = df_hist_filtrado.sort_values('data', ascending=(ordem == "Mais antigo"))
+        # Estatísticas
+        st.markdown("---")
+        st.subheader("📊 Resumo de Movimentações")
         
-        # Exibir
-        st.write(f"**Total de movimentações:** {len(df_hist_filtrado)}")
+        col1, col2, col3, col4 = st.columns(4)
         
-        for idx, mov in df_hist_filtrado.iterrows():
-            with st.container():
-                col1, col2, col3 = st.columns([1, 3, 2])
-                
-                with col1:
-                    if mov['tipo'] == 'ENTRADA':
-                        st.success(f"➕ {mov['tipo']}")
-                    else:
-                        st.error(f"➖ {mov['tipo']}")
-                
-                with col2:
-                    st.write(f"**{mov['codigo_bm']}** - {mov['descricao']}")
-                    st.write(f"Quantidade: {mov['quantidade']} | {mov.get('motivo', '')}")
-                
-                with col3:
-                    st.write(f"📅 {mov['data']}")
-                
-                st.markdown("---")
+        with col1:
+            total_mov = len(df_filtrado)
+            st.metric("Total de Movimentações", total_mov)
         
-        # Limpar filtro do histórico
-        if 'filtro_historico' in st.session_state:
-            del st.session_state['filtro_historico']
-    else:
-        st.info("📭 Nenhuma movimentação registrada ainda.")
+        with col2:
+            entradas = len(df_filtrado[df_filtrado['Tipo'].str.contains('Entrada')])
+            st.metric("Entradas", entradas)
+        
+        with col3:
+            saidas = len(df_filtrado[df_filtrado['Tipo'] == 'Saída'])
+            st.metric("Saídas", saidas)
+        
+        with col4:
+            valor_mov = df_filtrado['Valor Total'].sum()
+            st.metric("Valor Total Movimentado", formatar_moeda(valor_mov))
 
 # Rodapé
 st.markdown("---")
-st.markdown(
-    """
-    <div style='text-align: center; color: #666;'>
-        <p>Sistema de Controle de Estoque v2.0 | Desenvolvido com Streamlit</p>
-    </div>
-    """, 
-    unsafe_allow_html=True
-)
+st.markdown("🏢 **Sistema de Gestão de Estoque - SIG** | Desenvolvido com Streamlit")
