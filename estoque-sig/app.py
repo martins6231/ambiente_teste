@@ -1,1196 +1,443 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import io
-import base64
-from typing import Tuple, List, Optional, Dict, Any
 
 # Configuração da página
 st.set_page_config(
-    page_title="SIG CFA 112 - Sistema de Gestão de Estoque",
+    page_title="Sistema de Gestão de Estoque",
     page_icon="📦",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Estilos CSS customizados
+# CSS customizado
 st.markdown("""
 <style>
-    .stMetric {
+    .main-header {
+        font-size: 3rem;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .metric-card {
         background-color: #f0f2f6;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        padding: 1rem;
+        border-radius: 0.5rem;
+        text-align: center;
     }
-    .success-message {
-        padding: 10px;
-        border-radius: 5px;
-        background-color: #d4edda;
-        border: 1px solid #c3e6cb;
-        color: #155724;
-    }
-    .error-message {
-        padding: 10px;
-        border-radius: 5px;
-        background-color: #f8d7da;
-        border: 1px solid #f5c6cb;
-        color: #721c24;
-    }
-    .warning-message {
-        padding: 10px;
-        border-radius: 5px;
-        background-color: #fff3cd;
-        border: 1px solid #ffeeba;
-        color: #856404;
+    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
+        font-size: 1.2rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Classe para gerenciar o banco de dados
-class DatabaseManager:
-    def __init__(self, db_name: str = "estoque.db"):
-        self.db_name = db_name
-        self.init_database()
+# Inicialização do session state
+if 'df_estoque' not in st.session_state:
+    # Dados da planilha
+    data = {
+        'codigo': [888443216, 888443206, 860144291, 829341254, 870135114, 888489147, 888487020, 
+                   870110216, 888487023, 888489008, 860604041, 861590054, 860144031, 829228753, 
+                   860123728, 870145770, 870110110, 888316221, 860123552, 860123870, 877744152, 
+                   850144502, 940212331, 888308765, 888314728, 870180061, 888317803, 888443215, 
+                   829300605, 888443205, 860123553, 888306715, 860144710, 829228817, 888306713, 
+                   829341253, 888351027, 888316036, 888316009, 870123411, 860198377, 829286002, 
+                   829285188, 829284605, 829247981, 829340874, 829213085, 829248898, 829247920, 
+                   870123419],
+        'descricao': ['CABEÇA ARTICULADA 16XM16LH', 'CABEÇA ARTICULADA 16XM16', 'VÁLVULA PILOTO 500MM', 
+                      'CORREIA DENTADA', 'POLIA DE DESVIO', 'TUBO DE PLÁSTICO 8X1 -PA 11 W-GN', 
+                      'UNIÃO ANGULAR C8X1/8', 'ANILHA DE BORRACHA', 'UNIÃO ANGULAR', 
+                      'TUBO DE PLÁSTICO 6X1', 'EXAUSTOR CB6 FA. ACLA', 'JGO. PEÇAS DESGASTE FUER 861590053', 
+                      'SILENCIADOR G 1-8', 'ANEL DE RETENÇÃO', 'ENCAIXE DO FILTRO 55X4; 90-110', 
+                      'BIGORNA CFA112 RS COMPLETE', 'CILINDRO', 'ANEL DE RETENÇÃO', 'O-RING 6X1,5 - NBR', 
+                      'O-RING ASSÉPTICO 152 X 5', 'VÁLV. DISTRIB. 5/2 V581-ISO1', 
+                      'CORPO DA VÁLVULA 5-2MONOSTABLE VDMA01', 'CORPO DA VÁLVULA 5-3 GESCHL. VDMA01', 
+                      'ARRUELA DE PRESSÃO B10', 'PINO CILÍNDRICO 4X16', 'ROLO CASTER ROLL.501RL2CG', 
+                      'DISCO A 5,3-X12', 'CABEÇA ARTICULADA 10XM10LH', 'FACA', 'CABEÇA ARTICULADA 10XM10', 
+                      'O-RING 16X3 - EPDM', 'PORCA SEXTAVADA M10-A2', 'SILENCIADOR G 3-8', 
+                      'ANEL DE RETENÇÃO', 'PORCA SEXTAVADA M6-A2', 'ROLAMENTO DE ESFERA', 
+                      'ROLAMENTO DE ESFERAS ESTRIADA 6302-2RS1', 'ANEL DE RETENÇÃO', 'ANEL DE RETENÇÃO', 
+                      'O-RING 24,77X5,33', 'BATERIA S7-400 SPEKTRUM', 'BORRACHA', 'TAÇA DE ASPIRAÇÃO', 
+                      'RODA DENTADA Z=24 D=25X25', 'CILINDRO PNEUMÁTICO', 'SILENCIADOR', 'MOLA DE PRESSÃO', 
+                      'POLIA DE DESVIO', 'TAPETE TRANSPORTADOR B=400MM L=3950MM', 'FOLE DE PASSAGEM'],
+        'qtd': [3, 3, 17, 2, 1, 6, 9, 4, 8, 12, 24, 1, 5, 2, 1, 1, 4, 6, 1, 1, 8, 8, 4, 4, 1, 
+                2, 4, 1, 1, 1, 3, 3, 14, 5, 4, 2, 2, 1, 1, 1, 2, 1, 4, 7, 2, 1, 2, 3, 0, 5],
+        'custo_unitario': [233.09, 287.19, 1243.55, 2400.17, 1045.95, 20.36, 36.73, 26.16, 66.78, 
+                           42.62, 78.98, 5154.86, 37.83, 14.99, 213.06, 14941.33, 10089.93, 23.39, 
+                           5.09, 87.74, 1167.65, 993.46, 2980.39, 0.47, 5.52, 154.22, 0.21, 201.63, 
+                           1431.05, 174.84, 39.89, 0.89, 64.36, 28.37, 0.21, 1744.2, 115.78, 44.82, 
+                           1.91, 70.25, 191.87, 112.12, 196.04, 283.03, 728.9, 456.67, 112.12, 
+                           9513.96, 0, 6814.81],
+        'total_r_estoque': [699.27, 861.57, 21140.35, 4800.34, 1045.95, 122.16, 330.57, 104.64, 
+                            534.24, 511.44, 1895.52, 5154.86, 189.15, 29.98, 213.06, 14941.33, 
+                            40359.72, 140.34, 5.09, 87.74, 9341.2, 7947.68, 11921.56, 1.88, 5.52, 
+                            308.44, 0.84, 201.63, 1431.05, 174.84, 119.67, 2.67, 901.04, 141.85, 
+                            0.84, 3488.4, 231.56, 44.82, 1.91, 70.25, 383.74, 112.12, 784.16, 
+                            1981.21, 1457.8, 456.67, 224.24, 28541.88, 0, 34074.05]
+    }
     
-    def get_connection(self) -> sqlite3.Connection:
-        """Retorna uma conexão com o banco de dados."""
-        conn = sqlite3.connect(self.db_name)
-        conn.row_factory = sqlite3.Row
-        return conn
-    
-    def init_database(self) -> None:
-        """Inicializa o banco de dados e cria as tabelas necessárias."""
-        with self.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Criar tabela de peças (corrigido o bug da vírgula)
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS pecas (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    codigo TEXT UNIQUE NOT NULL,
-                    descricao TEXT NOT NULL,
-                    quantidade INTEGER NOT NULL DEFAULT 0,
-                    estoque_minimo INTEGER NOT NULL DEFAULT 0,
-                    estoque_maximo INTEGER NOT NULL DEFAULT 0,
-                    localizacao TEXT,
-                    categoria TEXT,
-                    unidade_medida TEXT DEFAULT 'UN',
-                    valor_unitario REAL DEFAULT 0.0,
-                    data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    data_atualizacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ''')
-            
-            # Criar tabela de movimentações
-            cursor.execute('''
-                CREATE TABLE IF NOT EXISTS movimentacoes (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    peca_id INTEGER NOT NULL,
-                    tipo TEXT NOT NULL CHECK(tipo IN ('entrada', 'saida')),
-                    quantidade INTEGER NOT NULL,
-                    motivo TEXT,
-                    responsavel TEXT,
-                    data_movimentacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    FOREIGN KEY (peca_id) REFERENCES pecas (id)
-                )
-            ''')
-            
-            # Criar índices para melhor performance
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_pecas_codigo ON pecas(codigo)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_movimentacoes_peca ON movimentacoes(peca_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_movimentacoes_data ON movimentacoes(data_movimentacao)')
-            
-            conn.commit()
+    st.session_state.df_estoque = pd.DataFrame(data)
 
-# Classe para gerenciar as operações de estoque
-class EstoqueManager:
-    def __init__(self, db_manager: DatabaseManager):
-        self.db = db_manager
-    
-    def adicionar_peca(self, codigo: str, descricao: str, quantidade: int, 
-                      estoque_minimo: int, estoque_maximo: int, 
-                      localizacao: str = None, categoria: str = None,
-                      unidade_medida: str = 'UN', valor_unitario: float = 0.0) -> Tuple[bool, str]:
-        """Adiciona uma nova peça ao estoque."""
-        try:
-            with self.db.get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute('''
-                    INSERT INTO pecas (codigo, descricao, quantidade, estoque_minimo, 
-                                     estoque_maximo, localizacao, categoria, 
-                                     unidade_medida, valor_unitario)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (codigo, descricao, quantidade, estoque_minimo, estoque_maximo,
-                     localizacao, categoria, unidade_medida, valor_unitario))
-                conn.commit()
-                return True, "Peça adicionada com sucesso!"
-        except sqlite3.IntegrityError:
-            return False, "Erro: Já existe uma peça com este código!"
-        except Exception as e:
-            return False, f"Erro ao adicionar peça: {str(e)}"
-    
-    def atualizar_peca(self, peca_id: int, **kwargs) -> Tuple[bool, str]:
-        """Atualiza os dados de uma peça (corrigido o bug dos parâmetros)."""
-        try:
-            campos_permitidos = ['descricao', 'estoque_minimo', 'estoque_maximo', 
-                               'localizacao', 'categoria', 'unidade_medida', 'valor_unitario']
-            
-            campos_update = []
-            valores = []
-            
-            for campo, valor in kwargs.items():
-                if campo in campos_permitidos and valor is not None:
-                    campos_update.append(f"{campo} = ?")
-                    valores.append(valor)
-            
-            if not campos_update:
-                return False, "Nenhum campo válido para atualizar"
-            
-            valores.append(datetime.now())
-            valores.append(peca_id)
-            
-            with self.db.get_connection() as conn:
-                cursor = conn.cursor()
-                query = f'''
-                    UPDATE pecas 
-                    SET {', '.join(campos_update)}, data_atualizacao = ?
-                    WHERE id = ?
-                '''
-                cursor.execute(query, valores)
-                
-                if cursor.rowcount == 0:
-                    return False, "Peça não encontrada"
-                
-                conn.commit()
-                return True, "Peça atualizada com sucesso!"
-        except Exception as e:
-            return False, f"Erro ao atualizar peça: {str(e)}"
-    
-    def registrar_movimentacao(self, peca_id: int, tipo: str, quantidade: int,
-                             motivo: str = None, responsavel: str = None) -> Tuple[bool, str]:
-        """Registra uma movimentação de entrada ou saída."""
-        try:
-            with self.db.get_connection() as conn:
-                cursor = conn.cursor()
-                
-                # Verificar estoque atual
-                cursor.execute('SELECT quantidade FROM pecas WHERE id = ?', (peca_id,))
-                result = cursor.fetchone()
-                
-                if not result:
-                    return False, "Peça não encontrada"
-                
-                estoque_atual = result['quantidade']
-                
-                if tipo == 'saida' and estoque_atual < quantidade:
-                    return False, f"Estoque insuficiente! Disponível: {estoque_atual}"
-                
-                # Atualizar quantidade
-                nova_quantidade = estoque_atual + quantidade if tipo == 'entrada' else estoque_atual - quantidade
-                cursor.execute('''
-                    UPDATE pecas 
-                    SET quantidade = ?, data_atualizacao = ? 
-                    WHERE id = ?
-                ''', (nova_quantidade, datetime.now(), peca_id))
-                
-                # Registrar movimentação
-                cursor.execute('''
-                    INSERT INTO movimentacoes (peca_id, tipo, quantidade, motivo, responsavel)
-                    VALUES (?, ?, ?, ?, ?)
-                ''', (peca_id, tipo, quantidade, motivo, responsavel))
-                
-                conn.commit()
-                return True, f"Movimentação registrada! Novo estoque: {nova_quantidade}"
-        except Exception as e:
-            return False, f"Erro ao registrar movimentação: {str(e)}"
-    
-    def buscar_pecas(self, filtro: str = None) -> pd.DataFrame:
-        """Busca peças no estoque com filtro opcional."""
-        with self.db.get_connection() as conn:
-            if filtro:
-                query = '''
-                    SELECT * FROM pecas 
-                    WHERE codigo LIKE ? OR descricao LIKE ? OR categoria LIKE ? OR localizacao LIKE ?
-                    ORDER BY codigo
-                '''
-                df = pd.read_sql_query(query, conn, params=(f'%{filtro}%', f'%{filtro}%', f'%{filtro}%', f'%{filtro}%'))
-            else:
-                df = pd.read_sql_query('SELECT * FROM pecas ORDER BY codigo', conn)
-            
-            return df
-    
-    def obter_estatisticas(self) -> Dict[str, Any]:
-        """Obtém estatísticas gerais do estoque."""
-        with self.db.get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Total de peças
-            cursor.execute('SELECT COUNT(*) as total FROM pecas')
-            total_pecas = cursor.fetchone()['total']
-            
-            # Valor total do estoque
-            cursor.execute('SELECT SUM(quantidade * valor_unitario) as valor_total FROM pecas')
-            valor_total = cursor.fetchone()['valor_total'] or 0
-            
-            # Peças abaixo do mínimo
-            cursor.execute('SELECT COUNT(*) as total FROM pecas WHERE quantidade < estoque_minimo')
-            pecas_abaixo_minimo = cursor.fetchone()['total']
-            
-            # Peças acima do máximo
-            cursor.execute('SELECT COUNT(*) as total FROM pecas WHERE quantidade > estoque_maximo')
-            pecas_acima_maximo = cursor.fetchone()['total']
-            
-            # Peças sem estoque
-            cursor.execute('SELECT COUNT(*) as total FROM pecas WHERE quantidade = 0')
-            pecas_sem_estoque = cursor.fetchone()['total']
-            
-            return {
-                'total_pecas': total_pecas,
-                'valor_total': valor_total,
-                'pecas_abaixo_minimo': pecas_abaixo_minimo,
-                'pecas_acima_maximo': pecas_acima_maximo,
-                'pecas_sem_estoque': pecas_sem_estoque
-            }
-    
-    def exportar_dados(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """Exporta dados de peças e movimentações."""
-        with self.db.get_connection() as conn:
-            pecas_df = pd.read_sql_query('SELECT * FROM pecas', conn)
-            movimentacoes_df = pd.read_sql_query('''
-                SELECT m.*, p.codigo, p.descricao 
-                FROM movimentacoes m
-                JOIN pecas p ON m.peca_id = p.id
-                ORDER BY m.data_movimentacao DESC
-            ''', conn)
-            
-            return pecas_df, movimentacoes_df
-    
-    def importar_pecas(self, df: pd.DataFrame) -> Tuple[int, int, List[str]]:
-        """Importa peças de um DataFrame."""
-        sucessos = 0
-        falhas = 0
-        erros = []
-        
-        colunas_obrigatorias = ['codigo', 'descricao', 'quantidade', 'estoque_minimo', 'estoque_maximo']
-        
-        # Verificar colunas obrigatórias
-        colunas_faltantes = [col for col in colunas_obrigatorias if col not in df.columns]
-        if colunas_faltantes:
-            return 0, len(df), [f"Colunas obrigatórias faltando: {', '.join(colunas_faltantes)}"]
-        
-        for _, row in df.iterrows():
-            try:
-                sucesso, msg = self.adicionar_peca(
-                    codigo=str(row['codigo']),
-                    descricao=str(row['descricao']),
-                    quantidade=int(row['quantidade']),
-                    estoque_minimo=int(row['estoque_minimo']),
-                    estoque_maximo=int(row['estoque_maximo']),
-                    localizacao=str(row.get('localizacao', '')) if pd.notna(row.get('localizacao')) else None,
-                    categoria=str(row.get('categoria', '')) if pd.notna(row.get('categoria')) else None,
-                    unidade_medida=str(row.get('unidade_medida', 'UN')),
-                    valor_unitario=float(row.get('valor_unitario', 0))
-                )
-                
-                if sucesso:
-                    sucessos += 1
-                else:
-                    falhas += 1
-                    erros.append(f"Código {row['codigo']}: {msg}")
-            except Exception as e:
-                falhas += 1
-                erros.append(f"Código {row.get('codigo', 'DESCONHECIDO')}: {str(e)}")
-        
-        return sucessos, falhas, erros
+# Título principal
+st.markdown('<h1 class="main-header">📦 Sistema de Gestão de Estoque</h1>', unsafe_allow_html=True)
 
-# Funções auxiliares para a interface
-def mostrar_mensagem(tipo: str, mensagem: str):
-    """Mostra mensagem formatada na interface."""
-    if tipo == "success":
-        st.markdown(f'<div class="success-message">✅ {mensagem}</div>', unsafe_allow_html=True)
-    elif tipo == "error":
-        st.markdown(f'<div class="error-message">❌ {mensagem}</div>', unsafe_allow_html=True)
-    elif tipo == "warning":
-        st.markdown(f'<div class="warning-message">⚠️ {mensagem}</div>', unsafe_allow_html=True)
-
-def download_link(df: pd.DataFrame, filename: str, text: str):
-    """Cria um link para download de DataFrame como CSV."""
-    csv = df.to_csv(index=False)
-    b64 = base64.b64encode(csv.encode()).decode()
-    href = f'<a href="data:file/csv;base64,{b64}" download="{filename}">{text}</a>'
-    return href
-
-# Inicializar managers
-db_manager = DatabaseManager()
-estoque_manager = EstoqueManager(db_manager)
-
-# Interface principal
-st.title("📦 SIG CFA 112 - Sistema de Gestão de Estoque")
-st.markdown("---")
-
-# Sidebar com navegação
+# Sidebar
 with st.sidebar:
-    st.image("https://via.placeholder.com/300x100/1f77b4/ffffff?text=SIG+CFA+112", use_column_width=True)
-    st.markdown("---")
-    
-    pagina = st.selectbox(
-        "Navegação",
-        ["🏠 Dashboard", "➕ Cadastrar Peça", "📥 Entrada de Estoque", 
-         "📤 Saída de Estoque", "🔍 Consultar Estoque", "📊 Relatórios", 
-         "🔧 Manutenção", "📁 Importar/Exportar"]
-    )
-    
-    st.markdown("---")
-    st.markdown("### 📌 Informações")
-    st.info("Sistema desenvolvido para gerenciamento completo de estoque com controle de entradas, saídas e níveis críticos.")
-
-# Dashboard
-if pagina == "🏠 Dashboard":
-    st.header("Dashboard - Visão Geral")
-    
-    # Estatísticas
-    stats = estoque_manager.obter_estatisticas()
-    
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    with col1:
-        st.metric("Total de Peças", stats['total_pecas'])
-    
-    with col2:
-        st.metric("Valor do Estoque", f"R$ {stats['valor_total']:,.2f}")
-    
-    with col3:
-        st.metric("Abaixo do Mínimo", stats['pecas_abaixo_minimo'], 
-                 delta=None if stats['pecas_abaixo_minimo'] == 0 else "⚠️")
-    
-    with col4:
-        st.metric("Acima do Máximo", stats['pecas_acima_maximo'])
-    
-    with col5:
-        st.metric("Sem Estoque", stats['pecas_sem_estoque'],
-                 delta=None if stats['pecas_sem_estoque'] == 0 else "❗")
-    
-    st.markdown("---")
-    
-    # Gráficos
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("📊 Distribuição por Categoria")
-        df_pecas = estoque_manager.buscar_pecas()
-        
-        if not df_pecas.empty and 'categoria' in df_pecas.columns:
-            categoria_counts = df_pecas['categoria'].value_counts()
-            fig_pizza = px.pie(
-                values=categoria_counts.values, 
-                names=categoria_counts.index,
-                title="Peças por Categoria"
-            )
-            st.plotly_chart(fig_pizza, use_container_width=True)
-        else:
-            st.info("Sem dados de categorias para exibir")
-    
-    with col2:
-        st.subheader("📈 Top 10 - Maiores Estoques")
-        if not df_pecas.empty:
-            top_10 = df_pecas.nlargest(10, 'quantidade')[['codigo', 'descricao', 'quantidade']]
-            fig_bar = px.bar(
-                top_10, 
-                x='quantidade', 
-                y='descricao',
-                orientation='h',
-                title="Top 10 Peças com Maior Estoque",
-                labels={'quantidade': 'Quantidade', 'descricao': 'Descrição'}
-            )
-            st.plotly_chart(fig_bar, use_container_width=True)
-        else:
-            st.info("Sem dados para exibir")
-    
-    # Alertas
-    st.markdown("---")
-    st.subheader("🚨 Alertas de Estoque")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("#### ⚠️ Peças Abaixo do Mínimo")
-        df_abaixo = df_pecas[df_pecas['quantidade'] < df_pecas['estoque_minimo']]
-        if not df_abaixo.empty:
-            st.dataframe(
-                df_abaixo[['codigo', 'descricao', 'quantidade', 'estoque_minimo']],
-                hide_index=True
-            )
-        else:
-            st.success("Nenhuma peça abaixo do estoque mínimo!")
-    
-    with col2:
-        st.markdown("#### 📈 Peças Acima do Máximo")
-        df_acima = df_pecas[df_pecas['quantidade'] > df_pecas['estoque_maximo']]
-        if not df_acima.empty:
-            st.dataframe(
-                df_acima[['codigo', 'descricao', 'quantidade', 'estoque_maximo']],
-                hide_index=True
-            )
-        else:
-            st.success("Nenhuma peça acima do estoque máximo!")
-
-# Cadastrar Peça
-elif pagina == "➕ Cadastrar Peça":
-    st.header("Cadastrar Nova Peça")
-    
-    with st.form("form_cadastro"):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            codigo = st.text_input("Código da Peça*", help="Código único da peça")
-            descricao = st.text_input("Descrição*", help="Descrição detalhada da peça")
-            categoria = st.selectbox("Categoria", ["", "Eletrônico", "Mecânico", "Hidráulico", "Elétrico", "Outros"])
-            unidade_medida = st.selectbox("Unidade de Medida", ["UN", "PC", "CX", "KG", "MT", "LT"])
-        
-        with col2:
-            quantidade = st.number_input("Quantidade Inicial*", min_value=0, value=0)
-            estoque_minimo = st.number_input("Estoque Mínimo*", min_value=0, value=0)
-            estoque_maximo = st.number_input("Estoque Máximo*", min_value=0, value=100)
-            valor_unitario = st.number_input("Valor Unitário (R$)", min_value=0.0, value=0.0, format="%.2f")
-        
-        localizacao = st.text_input("Localização", placeholder="Ex: Prateleira A-01")
-        
-        submitted = st.form_submit_button("Cadastrar Peça", type="primary")
-        
-        if submitted:
-            if not codigo or not descricao:
-                mostrar_mensagem("error", "Código e descrição são obrigatórios!")
-            elif estoque_minimo > estoque_maximo:
-                mostrar_mensagem("error", "Estoque mínimo não pode ser maior que o máximo!")
-            else:
-                sucesso, mensagem = estoque_manager.adicionar_peca(
-                    codigo=codigo,
-                    descricao=descricao,
-                    quantidade=quantidade,
-                    estoque_minimo=estoque_minimo,
-                    estoque_maximo=estoque_maximo,
-                    localizacao=localizacao if localizacao else None,
-                    categoria=categoria if categoria else None,
-                    unidade_medida=unidade_medida,
-                    valor_unitario=valor_unitario
-                )
-                
-                if sucesso:
-                    mostrar_mensagem("success", mensagem)
-                    st.balloons()
-                else:
-                    mostrar_mensagem("error", mensagem)
-
-# Entrada de Estoque
-elif pagina == "📥 Entrada de Estoque":
-    st.header("Registrar Entrada de Estoque")
-    
-    # Buscar peças
-    df_pecas = estoque_manager.buscar_pecas()
-    
-    if df_pecas.empty:
-        st.warning("Nenhuma peça cadastrada. Cadastre peças primeiro!")
-    else:
-        with st.form("form_entrada"):
-            col1, col2 = st.columns([2, 1])
-            
-            with col1:
-                pecas_opcoes = df_pecas.apply(lambda x: f"{x['codigo']} - {x['descricao']}", axis=1).tolist()
-                peca_selecionada = st.selectbox("Selecione a Peça", pecas_opcoes)
-                
-                if peca_selecionada:
-                    peca_index = pecas_opcoes.index(peca_selecionada)
-                    peca_info = df_pecas.iloc[peca_index]
-                    
-                    st.info(f"""
-                    **Estoque Atual:** {peca_info['quantidade']} {peca_info['unidade_medida']}  
-                    **Localização:** {peca_info['localizacao'] or 'Não definida'}  
-                    **Categoria:** {peca_info['categoria'] or 'Não definida'}
-                    """)
-            
-            with col2:
-                quantidade = st.number_input("Quantidade", min_value=1, value=1)
-            
-            motivo = st.text_input("Motivo da Entrada", placeholder="Ex: Compra, Devolução, etc.")
-            responsavel = st.text_input("Responsável", placeholder="Nome do responsável")
-            
-            submitted = st.form_submit_button("Registrar Entrada", type="primary")
-            
-            if submitted and peca_selecionada:
-                peca_id = df_pecas.iloc[peca_index]['id']
-                
-                sucesso, mensagem = estoque_manager.registrar_movimentacao(
-                    peca_id=peca_id,
-                    tipo='entrada',
-                    quantidade=quantidade,
-                    motivo=motivo if motivo else None,
-                    responsavel=responsavel if responsavel else None
-                )
-                
-                if sucesso:
-                    mostrar_mensagem("success", mensagem)
-                    st.balloons()
-                else:
-                    mostrar_mensagem("error", mensagem)
-
-# Saída de Estoque
-elif pagina == "📤 Saída de Estoque":
-    st.header("Registrar Saída de Estoque")
-    
-    # Buscar peças
-    df_pecas = estoque_manager.buscar_pecas()
-    
-    if df_pecas.empty:
-        st.warning("Nenhuma peça cadastrada. Cadastre peças primeiro!")
-    else:
-        # Filtrar apenas peças com estoque
-        df_com_estoque = df_pecas[df_pecas['quantidade'] > 0]
-        
-        if df_com_estoque.empty:
-            st.warning("Nenhuma peça disponível em estoque!")
-        else:
-            with st.form("form_saida"):
-                col1, col2 = st.columns([2, 1])
-                
-                with col1:
-                    pecas_opcoes = df_com_estoque.apply(lambda x: f"{x['codigo']} - {x['descricao']}", axis=1).tolist()
-                    peca_selecionada = st.selectbox("Selecione a Peça", pecas_opcoes)
-                    
-                    if peca_selecionada:
-                        peca_index = pecas_opcoes.index(peca_selecionada)
-                        peca_info = df_com_estoque.iloc[peca_index]
-                        
-                        st.info(f"""
-                        **Estoque Atual:** {peca_info['quantidade']} {peca_info['unidade_medida']}  
-                        **Localização:** {peca_info['localizacao'] or 'Não definida'}  
-                        **Categoria:** {peca_info['categoria'] or 'Não definida'}
-                        """)
-                
-                with col2:
-                    max_quantidade = int(peca_info['quantidade']) if peca_selecionada else 1
-                    quantidade = st.number_input("Quantidade", min_value=1, max_value=max_quantidade, value=1)
-                
-                motivo = st.text_input("Motivo da Saída", placeholder="Ex: Manutenção, Projeto, etc.")
-                responsavel = st.text_input("Responsável", placeholder="Nome do responsável")
-                
-                submitted = st.form_submit_button("Registrar Saída", type="primary")
-                
-                if submitted and peca_selecionada:
-                    peca_id = df_com_estoque.iloc[peca_index]['id']
-                    
-                    sucesso, mensagem = estoque_manager.registrar_movimentacao(
-                        peca_id=peca_id,
-                        tipo='saida',
-                        quantidade=quantidade,
-                        motivo=motivo if motivo else None,
-                        responsavel=responsavel if responsavel else None
-                    )
-                    
-                    if sucesso:
-                        mostrar_mensagem("success", mensagem)
-                        st.balloons()
-                    else:
-                        mostrar_mensagem("error", mensagem)
-
-# Consultar Estoque
-elif pagina == "🔍 Consultar Estoque":
-    st.header("Consultar Estoque")
+    st.header("⚙️ Configurações")
     
     # Filtros
-    col1, col2, col3 = st.columns([2, 1, 1])
+    st.subheader("🔍 Filtros")
+    
+    # Filtro por descrição
+    descricoes = ['Todos'] + sorted(st.session_state.df_estoque['descricao'].unique().tolist())
+    descricao_selecionada = st.selectbox("Descrição do Produto", descricoes)
+    
+    # Filtro por faixa de quantidade
+    qtd_min, qtd_max = st.slider(
+        "Faixa de Quantidade",
+        min_value=0,
+        max_value=int(st.session_state.df_estoque['qtd'].max()),
+        value=(0, int(st.session_state.df_estoque['qtd'].max()))
+    )
+    
+    # Filtro por faixa de valor
+    valor_min, valor_max = st.slider(
+        "Faixa de Valor Total (R$)",
+        min_value=0.0,
+        max_value=float(st.session_state.df_estoque['total_r_estoque'].max()),
+        value=(0.0, float(st.session_state.df_estoque['total_r_estoque'].max())),
+        format="R$ %.2f"
+    )
+
+# Aplicar filtros
+df_filtrado = st.session_state.df_estoque.copy()
+
+if descricao_selecionada != 'Todos':
+    df_filtrado = df_filtrado[df_filtrado['descricao'] == descricao_selecionada]
+
+df_filtrado = df_filtrado[
+    (df_filtrado['qtd'] >= qtd_min) & 
+    (df_filtrado['qtd'] <= qtd_max) &
+    (df_filtrado['total_r_estoque'] >= valor_min) & 
+    (df_filtrado['total_r_estoque'] <= valor_max)
+]
+
+# Métricas principais
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    st.metric(
+        "Total de Produtos",
+        f"{len(df_filtrado):,}",
+        delta=f"{len(df_filtrado) - len(st.session_state.df_estoque)} filtrados"
+    )
+
+with col2:
+    st.metric(
+        "Valor Total em Estoque",
+        f"R$ {df_filtrado['total_r_estoque'].sum():,.2f}"
+    )
+
+with col3:
+    st.metric(
+        "Quantidade Total",
+        f"{df_filtrado['qtd'].sum():,}"
+    )
+
+with col4:
+    st.metric(
+        "Ticket Médio",
+        f"R$ {df_filtrado['custo_unitario'].mean():,.2f}"
+    )
+
+# Tabs principais
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "📋 Gestão de Produtos", "📈 Análises", "⚠️ Alertas"])
+
+with tab1:
+    col1, col2 = st.columns(2)
     
     with col1:
-        filtro = st.text_input("🔍 Buscar (código, descrição, categoria ou localização)", 
-                              placeholder="Digite para filtrar...")
+        # Top 10 produtos por valor
+        top_produtos = df_filtrado.nlargest(10, 'total_r_estoque')
+        fig_top = px.bar(
+            top_produtos,
+            x='total_r_estoque',
+            y='descricao',
+            orientation='h',
+            title='Top 10 Produtos por Valor em Estoque',
+            labels={'total_r_estoque': 'Valor Total (R$)', 'descricao': 'Produto'},
+            color='total_r_estoque',
+            color_continuous_scale='Blues'
+        )
+        fig_top.update_layout(height=400, showlegend=False)
+        st.plotly_chart(fig_top, use_container_width=True)
     
     with col2:
-        mostrar_criticos = st.checkbox("Apenas críticos", help="Mostrar apenas itens abaixo do mínimo")
+        # Distribuição de valores
+        fig_dist = px.pie(
+            df_filtrado.nlargest(10, 'total_r_estoque'),
+            values='total_r_estoque',
+            names='descricao',
+            title='Distribuição do Valor em Estoque (Top 10)'
+        )
+        fig_dist.update_layout(height=400)
+        st.plotly_chart(fig_dist, use_container_width=True)
+    
+    # Análise de Pareto
+    st.subheader("📊 Análise de Pareto (Curva ABC)")
+    
+    # Preparar dados para Pareto
+    df_pareto = df_filtrado.sort_values('total_r_estoque', ascending=False).copy()
+    df_pareto['percentual_valor'] = (df_pareto['total_r_estoque'] / df_pareto['total_r_estoque'].sum()) * 100
+    df_pareto['percentual_acumulado'] = df_pareto['percentual_valor'].cumsum()
+    df_pareto['percentual_itens'] = (range(1, len(df_pareto) + 1) / len(df_pareto)) * 100
+    
+    # Classificação ABC
+    df_pareto['classificacao'] = pd.cut(
+        df_pareto['percentual_acumulado'],
+        bins=[0, 80, 95, 100],
+        labels=['A', 'B', 'C']
+    )
+    
+    # Gráfico de Pareto
+    fig_pareto = go.Figure()
+    
+    fig_pareto.add_trace(go.Bar(
+        x=df_pareto.index,
+        y=df_pareto['percentual_valor'],
+        name='% do Valor',
+        yaxis='y',
+        marker_color='lightblue'
+    ))
+    
+    fig_pareto.add_trace(go.Scatter(
+        x=df_pareto.index,
+        y=df_pareto['percentual_acumulado'],
+        name='% Acumulado',
+        yaxis='y2',
+        line=dict(color='red', width=2)
+    ))
+    
+    fig_pareto.update_layout(
+        title='Curva ABC - Análise de Pareto',
+        xaxis=dict(title='Produtos'),
+        yaxis=dict(title='% do Valor Total', side='left'),
+        yaxis2=dict(title='% Acumulado', overlaying='y', side='right'),
+        hovermode='x unified',
+        height=400
+    )
+    
+    st.plotly_chart(fig_pareto, use_container_width=True)
+    
+    # Resumo ABC
+    col1, col2, col3 = st.columns(3)
+    
+    for col, classe in zip([col1, col2, col3], ['A', 'B', 'C']):
+        with col:
+            classe_df = df_pareto[df_pareto['classificacao'] == classe]
+            st.metric(
+                f"Classe {classe}",
+                f"{len(classe_df)} produtos",
+                f"R$ {classe_df['total_r_estoque'].sum():,.2f}"
+            )
+
+with tab2:
+    st.subheader("📋 Tabela de Produtos")
+    
+    # Opções de visualização
+    col1, col2, col3 = st.columns([2, 2, 1])
+    
+    with col1:
+        ordenar_por = st.selectbox(
+            "Ordenar por",
+            ['codigo', 'descricao', 'qtd', 'custo_unitario', 'total_r_estoque']
+        )
+    
+    with col2:
+        ordem = st.radio("Ordem", ['Crescente', 'Decrescente'], horizontal=True)
     
     with col3:
-        mostrar_sem_estoque = st.checkbox("Incluir sem estoque", help="Incluir itens com estoque zerado")
+        mostrar_zeros = st.checkbox("Mostrar produtos zerados", value=True)
     
-    # Buscar peças
-    df_pecas = estoque_manager.buscar_pecas(filtro)
+    # Aplicar ordenação
+    df_tabela = df_filtrado.copy()
+    if not mostrar_zeros:
+        df_tabela = df_tabela[df_tabela['qtd'] > 0]
     
-    if not df_pecas.empty:
-        # Aplicar filtros adicionais
-        if mostrar_criticos:
-            df_pecas = df_pecas[df_pecas['quantidade'] < df_pecas['estoque_minimo']]
-        
-        if not mostrar_sem_estoque:
-            df_pecas = df_pecas[df_pecas['quantidade'] > 0]
-        
-        # Adicionar coluna de status
-        def definir_status(row):
-            if row['quantidade'] == 0:
-                return "❌ Sem Estoque"
-            elif row['quantidade'] < row['estoque_minimo']:
-                return "⚠️ Abaixo do Mínimo"
-            elif row['quantidade'] > row['estoque_maximo']:
-                return "📈 Acima do Máximo"
-            else:
-                return "✅ Normal"
-        
-        df_pecas['Status'] = df_pecas.apply(definir_status, axis=1)
-        
-        # Estatísticas da busca
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Total de Itens", len(df_pecas))
-        with col2:
-            st.metric("Valor Total", f"R$ {(df_pecas['quantidade'] * df_pecas['valor_unitario']).sum():,.2f}")
-        with col3:
-            st.metric("Itens Críticos", len(df_pecas[df_pecas['quantidade'] < df_pecas['estoque_minimo']]))
-        with col4:
-            st.metric("Sem Estoque", len(df_pecas[df_pecas['quantidade'] == 0]))
-        
-        st.markdown("---")
-        
-        # Tabela de resultados
-        colunas_exibir = ['codigo', 'descricao', 'quantidade', 'unidade_medida', 
-                         'estoque_minimo', 'estoque_maximo', 'valor_unitario', 
-                         'localizacao', 'categoria', 'Status']
-        
-        st.dataframe(
-            df_pecas[colunas_exibir],
-            hide_index=True,
-            column_config={
-                "codigo": "Código",
-                "descricao": "Descrição",
-                "quantidade": st.column_config.NumberColumn("Quantidade", format="%d"),
-                "unidade_medida": "Un.",
-                "estoque_minimo": st.column_config.NumberColumn("Mínimo", format="%d"),
-                "estoque_maximo": st.column_config.NumberColumn("Máximo", format="%d"),
-                "valor_unitario": st.column_config.NumberColumn("Valor Unit.", format="R$ %.2f"),
-                "localizacao": "Localização",
-                "categoria": "Categoria",
-                "Status": "Status"
-            }
-        )
-    else:
-        st.info("Nenhuma peça encontrada com os filtros aplicados.")
-
-# Relatórios
-elif pagina == "📊 Relatórios":
-    st.header("Relatórios e Análises")
+    df_tabela = df_tabela.sort_values(ordenar_por, ascending=(ordem == 'Crescente'))
     
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Análise Geral", "📈 Movimentações", "💰 Financeiro", "📋 Inventário"])
+    # Formatar valores para exibição
+    df_display = df_tabela.copy()
+    df_display['custo_unitario'] = df_display['custo_unitario'].apply(lambda x: f"R$ {x:,.2f}")
+    df_display['total_r_estoque'] = df_display['total_r_estoque'].apply(lambda x: f"R$ {x:,.2f}")
     
-    with tab1:
-        st.subheader("Análise Geral do Estoque")
-        
-        df_pecas = estoque_manager.buscar_pecas()
-        
-        if not df_pecas.empty:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Gráfico de categorias
-                if 'categoria' in df_pecas.columns:
-                    fig_cat = px.pie(
-                        df_pecas.groupby('categoria').size().reset_index(name='count'),
-                        values='count',
-                        names='categoria',
-                        title='Distribuição por Categoria'
-                    )
-                    st.plotly_chart(fig_cat, use_container_width=True)
-            
-            with col2:
-                # Gráfico de status
-                df_status = pd.DataFrame({
-                    'Status': ['Normal', 'Abaixo do Mínimo', 'Acima do Máximo', 'Sem Estoque'],
-                    'Quantidade': [
-                        len(df_pecas[(df_pecas['quantidade'] >= df_pecas['estoque_minimo']) & 
-                                   (df_pecas['quantidade'] <= df_pecas['estoque_maximo']) & 
-                                   (df_pecas['quantidade'] > 0)]),
-                        len(df_pecas[df_pecas['quantidade'] < df_pecas['estoque_minimo']]),
-                        len(df_pecas[df_pecas['quantidade'] > df_pecas['estoque_maximo']]),
-                        len(df_pecas[df_pecas['quantidade'] == 0])
-                    ]
-                })
-                
-                fig_status = px.bar(
-                    df_status,
-                    x='Status',
-                    y='Quantidade',
-                    title='Análise de Status do Estoque',
-                    color='Status',
-                    color_discrete_map={
-                        'Normal': 'green',
-                        'Abaixo do Mínimo': 'orange',
-                        'Acima do Máximo': 'blue',
-                        'Sem Estoque': 'red'
-                    }
-                )
-                st.plotly_chart(fig_status, use_container_width=True)
+    # Exibir tabela
+    st.dataframe(
+        df_display,
+        use_container_width=True,
+        height=400,
+        column_config={
+            "codigo": st.column_config.NumberColumn("Código", format="%d"),
+            "descricao": st.column_config.TextColumn("Descrição"),
+            "qtd": st.column_config.NumberColumn("Quantidade", format="%d"),
+            "custo_unitario": "Custo Unitário",
+            "total_r_estoque": "Total em Estoque"
+        }
+    )
     
-    with tab2:
-        st.subheader("Histórico de Movimentações")
-        
-        # Período
-        col1, col2 = st.columns(2)
-        with col1:
-            data_inicio = st.date_input("Data Inicial", value=pd.Timestamp.now() - pd.Timedelta(days=30))
-        with col2:
-            data_fim = st.date_input("Data Final", value=pd.Timestamp.now())
-        
-        # Buscar movimentações
-        with db_manager.get_connection() as conn:
-            query = '''
-                SELECT m.*, p.codigo, p.descricao 
-                FROM movimentacoes m
-                JOIN pecas p ON m.peca_id = p.id
-                WHERE DATE(m.data_movimentacao) BETWEEN ? AND ?
-                ORDER BY m.data_movimentacao DESC
-            '''
-            df_mov = pd.read_sql_query(query, conn, params=(data_inicio, data_fim))
-        
-        if not df_mov.empty:
-            # Estatísticas do período
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                total_entradas = len(df_mov[df_mov['tipo'] == 'entrada'])
-                st.metric("Total de Entradas", total_entradas)
-            with col2:
-                total_saidas = len(df_mov[df_mov['tipo'] == 'saida'])
-                st.metric("Total de Saídas", total_saidas)
-            with col3:
-                st.metric("Total de Movimentações", len(df_mov))
-            
-            # Gráfico de movimentações por dia
-            df_mov['data'] = pd.to_datetime(df_mov['data_movimentacao']).dt.date
-            mov_por_dia = df_mov.groupby(['data', 'tipo']).size().reset_index(name='quantidade')
-            
-            fig_mov = px.line(
-                mov_por_dia,
-                x='data',
-                y='quantidade',
-                color='tipo',
-                title='Movimentações por Dia',
-                markers=True
-            )
-            st.plotly_chart(fig_mov, use_container_width=True)
-            
-            # Tabela de movimentações
-            st.subheader("Detalhamento das Movimentações")
-            st.dataframe(
-                df_mov[['data_movimentacao', 'codigo', 'descricao', 'tipo', 'quantidade', 'motivo', 'responsavel']],
-                hide_index=True,
-                column_config={
-                    'data_movimentacao': st.column_config.DatetimeColumn('Data/Hora', format='DD/MM/YYYY HH:mm'),
-                    'codigo': 'Código',
-                    'descricao': 'Descrição',
-                    'tipo': 'Tipo',
-                    'quantidade': st.column_config.NumberColumn('Quantidade', format='%d'),
-                    'motivo': 'Motivo',
-                    'responsavel': 'Responsável'
-                }
-            )
-        else:
-            st.info("Nenhuma movimentação encontrada no período selecionado.")
+    # Botões de ação
+    col1, col2, col3 = st.columns(3)
     
-    with tab3:
-        st.subheader("Análise Financeira")
-        
-        df_pecas = estoque_manager.buscar_pecas()
-        
-        if not df_pecas.empty:
-            # Calcular valores
-            df_pecas['valor_total'] = df_pecas['quantidade'] * df_pecas['valor_unitario']
-            
-            # Métricas financeiras
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                valor_total_estoque = df_pecas['valor_total'].sum()
-                st.metric("Valor Total do Estoque", f"R$ {valor_total_estoque:,.2f}")
-            with col2:
-                valor_medio = df_pecas[df_pecas['valor_unitario'] > 0]['valor_unitario'].mean()
-                st.metric("Valor Médio Unitário", f"R$ {valor_medio:,.2f}")
-            with col3:
-                itens_com_valor = len(df_pecas[df_pecas['valor_unitario'] > 0])
-                st.metric("Itens com Valor Cadastrado", itens_com_valor)
-            
-            # Top 10 mais valiosos
-            st.subheader("Top 10 - Itens Mais Valiosos em Estoque")
-            top_valor = df_pecas.nlargest(10, 'valor_total')[['codigo', 'descricao', 'quantidade', 'valor_unitario', 'valor_total']]
-            
-            fig_valor = px.bar(
-                top_valor,
-                x='valor_total',
-                y='descricao',
-                orientation='h',
-                title='Top 10 Itens por Valor Total',
-                labels={'valor_total': 'Valor Total (R$)', 'descricao': 'Descrição'}
-            )
-            st.plotly_chart(fig_valor, use_container_width=True)
-            
-            # Valor por categoria
-            if 'categoria' in df_pecas.columns:
-                valor_categoria = df_pecas.groupby('categoria')['valor_total'].sum().reset_index()
-                
-                fig_cat_valor = px.pie(
-                    valor_categoria,
-                    values='valor_total',
-                    names='categoria',
-                    title='Distribuição de Valor por Categoria'
-                )
-                st.plotly_chart(fig_cat_valor, use_container_width=True)
+    with col1:
+        if st.button("🔄 Atualizar Estoque", use_container_width=True):
+            st.info("Funcionalidade de atualização em desenvolvimento")
     
-    with tab4:
-        st.subheader("Relatório de Inventário")
-        
-        df_pecas = estoque_manager.buscar_pecas()
-        
-        if not df_pecas.empty:
-            # Opções de filtro para o relatório
-            col1, col2 = st.columns(2)
-            with col1:
-                categorias = ['Todas'] + df_pecas['categoria'].dropna().unique().tolist()
-                categoria_filtro = st.selectbox("Filtrar por Categoria", categorias)
-            with col2:
-                ordenar_por = st.selectbox("Ordenar por", ['Código', 'Descrição', 'Quantidade', 'Valor Total'])
-            
-            # Aplicar filtros
-            df_relatorio = df_pecas.copy()
-            if categoria_filtro != 'Todas':
-                df_relatorio = df_relatorio[df_relatorio['categoria'] == categoria_filtro]
-            
-            # Adicionar valor total
-            df_relatorio['valor_total'] = df_relatorio['quantidade'] * df_relatorio['valor_unitario']
-            
-            # Ordenar
-            ordem_map = {
-                'Código': 'codigo',
-                'Descrição': 'descricao',
-                'Quantidade': 'quantidade',
-                'Valor Total': 'valor_total'
-            }
-            df_relatorio = df_relatorio.sort_values(ordem_map[ordenar_por])
-            
-            # Resumo
-            st.markdown("### 📊 Resumo do Inventário")
-            col1, col2, col3, col4 = st.columns(4)
-            with col1:
-                st.metric("Total de Itens", len(df_relatorio))
-            with col2:
-                st.metric("Quantidade Total", f"{df_relatorio['quantidade'].sum():,}")
-            with col3:
-                st.metric("Valor Total", f"R$ {df_relatorio['valor_total'].sum():,.2f}")
-            with col4:
-                itens_criticos = len(df_relatorio[df_relatorio['quantidade'] < df_relatorio['estoque_minimo']])
-                st.metric("Itens Críticos", itens_criticos)
-            
-            # Tabela do inventário
-            st.markdown("### 📋 Detalhamento do Inventário")
-            
-            # Preparar dados para exibição
-            df_exibir = df_relatorio[[
-                'codigo', 'descricao', 'categoria', 'quantidade', 
-                'unidade_medida', 'estoque_minimo', 'estoque_maximo',
-                'valor_unitario', 'valor_total', 'localizacao'
-            ]].copy()
-            
-            # Download do relatório
-            csv = df_exibir.to_csv(index=False)
-            st.download_button(
-                label="📥 Baixar Relatório em CSV",
-                data=csv,
-                file_name=f"inventario_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
-            )
-            
-            # Exibir tabela
-            st.dataframe(
-                df_exibir,
-                hide_index=True,
-                column_config={
-                    'codigo': 'Código',
-                    'descricao': 'Descrição',
-                    'categoria': 'Categoria',
-                    'quantidade': st.column_config.NumberColumn('Qtd', format='%d'),
-                    'unidade_medida': 'Un.',
-                    'estoque_minimo': st.column_config.NumberColumn('Mín', format='%d'),
-                    'estoque_maximo': st.column_config.NumberColumn('Máx', format='%d'),
-                    'valor_unitario': st.column_config.NumberColumn('Valor Unit.', format='R$ %.2f'),
-                    'valor_total': st.column_config.NumberColumn('Valor Total', format='R$ %.2f'),
-                    'localizacao': 'Local'
-                }
-            )
-
-# Manutenção
-elif pagina == "🔧 Manutenção":
-    st.header("Manutenção de Peças")
+    with col2:
+        if st.button("➕ Adicionar Produto", use_container_width=True):
+            st.info("Funcionalidade de adição em desenvolvimento")
     
-    df_pecas = estoque_manager.buscar_pecas()
-    
-    if df_pecas.empty:
-        st.warning("Nenhuma peça cadastrada para manutenção.")
-    else:
-        # Seleção da peça
-        pecas_opcoes = df_pecas.apply(lambda x: f"{x['codigo']} - {x['descricao']}", axis=1).tolist()
-        peca_selecionada = st.selectbox("Selecione a peça para editar", pecas_opcoes)
+    with col3:
+        # Exportar para Excel
+        buffer = io.BytesIO()
+        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+            df_tabela.to_excel(writer, sheet_name='Estoque', index=False)
         
-        if peca_selecionada:
-            peca_index = pecas_opcoes.index(peca_selecionada)
-            peca_info = df_pecas.iloc[peca_index]
-            
-            st.markdown("---")
-            st.subheader(f"Editando: {peca_info['codigo']} - {peca_info['descricao']}")
-            
-            # Formulário de edição
-            with st.form("form_edicao"):
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    nova_descricao = st.text_input("Descrição", value=peca_info['descricao'])
-                    nova_categoria = st.selectbox(
-                        "Categoria", 
-                        ["", "Eletrônico", "Mecânico", "Hidráulico", "Elétrico", "Outros"],
-                        index=["", "Eletrônico", "Mecânico", "Hidráulico", "Elétrico", "Outros"].index(peca_info['categoria'] or "")
-                    )
-                    nova_unidade = st.selectbox(
-                        "Unidade de Medida",
-                        ["UN", "PC", "CX", "KG", "MT", "LT"],
-                        index=["UN", "PC", "CX", "KG", "MT", "LT"].index(peca_info['unidade_medida'])
-                    )
-                
-                with col2:
-                    novo_minimo = st.number_input("Estoque Mínimo", min_value=0, value=int(peca_info['estoque_minimo']))
-                    novo_maximo = st.number_input("Estoque Máximo", min_value=0, value=int(peca_info['estoque_maximo']))
-                    novo_valor = st.number_input("Valor Unitário (R$)", min_value=0.0, value=float(peca_info['valor_unitario']), format="%.2f")
-                
-                nova_localizacao = st.text_input("Localização", value=peca_info['localizacao'] or "")
-                
-                col1, col2, col3 = st.columns([1, 1, 3])
-                with col1:
-                    submitted = st.form_submit_button("💾 Salvar Alterações", type="primary")
-                with col2:
-                    deletar = st.form_submit_button("🗑️ Excluir Peça", type="secondary")
-                
-                if submitted:
-                    if novo_minimo > novo_maximo:
-                        mostrar_mensagem("error", "Estoque mínimo não pode ser maior que o máximo!")
-                    else:
-                        sucesso, mensagem = estoque_manager.atualizar_peca(
-                            peca_id=peca_info['id'],
-                            descricao=nova_descricao,
-                            estoque_minimo=novo_minimo,
-                            estoque_maximo=novo_maximo,
-                            localizacao=nova_localizacao if nova_localizacao else None,
-                            categoria=nova_categoria if nova_categoria else None,
-                            unidade_medida=nova_unidade,
-                            valor_unitario=novo_valor
-                        )
-                        
-                        if sucesso:
-                            mostrar_mensagem("success", mensagem)
-                            st.balloons()
-                            st.rerun()
-                        else:
-                            mostrar_mensagem("error", mensagem)
-                
-                if deletar:
-                    # Confirmar exclusão
-                    if st.session_state.get('confirmar_exclusao', False):
-                        try:
-                            with db_manager.get_connection() as conn:
-                                cursor = conn.cursor()
-                                # Verificar se há movimentações
-                                cursor.execute('SELECT COUNT(*) as total FROM movimentacoes WHERE peca_id = ?', (peca_info['id'],))
-                                movimentacoes = cursor.fetchone()['total']
-                                
-                                if movimentacoes > 0:
-                                    mostrar_mensagem("error", f"Não é possível excluir! Existem {movimentacoes} movimentações registradas para esta peça.")
-                                else:
-                                    cursor.execute('DELETE FROM pecas WHERE id = ?', (peca_info['id'],))
-                                    conn.commit()
-                                    mostrar_mensagem("success", "Peça excluída com sucesso!")
-                                    st.session_state['confirmar_exclusao'] = False
-                                    st.rerun()
-                        except Exception as e:
-                            mostrar_mensagem("error", f"Erro ao excluir peça: {str(e)}")
-                    else:
-                        st.session_state['confirmar_exclusao'] = True
-                        st.warning("⚠️ Clique novamente em 'Excluir Peça' para confirmar a exclusão!")
-
-# Importar/Exportar
-elif pagina == "📁 Importar/Exportar":
-    st.header("Importar/Exportar Dados")
-    
-    tab1, tab2 = st.tabs(["📥 Importar", "📤 Exportar"])
-    
-    with tab1:
-        st.subheader("Importar Peças")
-        
-        st.info("""
-        ### 📋 Formato do arquivo CSV:
-        O arquivo deve conter as seguintes colunas obrigatórias:
-        - **codigo**: Código único da peça
-        - **descricao**: Descrição da peça
-        - **quantidade**: Quantidade em estoque
-        - **estoque_minimo**: Estoque mínimo
-        - **estoque_maximo**: Estoque máximo
-        
-        Colunas opcionais:
-        - **localizacao**: Localização da peça
-        - **categoria**: Categoria da peça
-        - **unidade_medida**: Unidade de medida (padrão: UN)
-        - **valor_unitario**: Valor unitário (padrão: 0.00)
-        """)
-        
-        # Download do modelo
-        modelo_df = pd.DataFrame({
-            'codigo': ['PEC001', 'PEC002'],
-            'descricao': ['Peça Exemplo 1', 'Peça Exemplo 2'],
-            'quantidade': [10, 20],
-            'estoque_minimo': [5, 10],
-            'estoque_maximo': [50, 100],
-            'localizacao': ['A-01', 'B-02'],
-            'categoria': ['Eletrônico', 'Mecânico'],
-            'unidade_medida': ['UN', 'PC'],
-            'valor_unitario': [15.50, 25.00]
-        })
-        
-        csv_modelo = modelo_df.to_csv(index=False)
         st.download_button(
-            label="📥 Baixar Modelo CSV",
-            data=csv_modelo,
-            file_name="modelo_importacao_pecas.csv",
-            mime="text/csv"
+            label="📥 Exportar Excel",
+            data=buffer.getvalue(),
+            file_name=f"estoque_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
         )
-        
-        st.markdown("---")
-        
-        # Upload do arquivo
-        uploaded_file = st.file_uploader("Escolha o arquivo CSV", type=['csv'])
-        
-        if uploaded_file is not None:
-            try:
-                df_import = pd.read_csv(uploaded_file)
-                
-                st.subheader("📋 Prévia dos dados")
-                st.dataframe(df_import.head(10))
-                
-                col1, col2 = st.columns([1, 4])
-                with col1:
-                    if st.button("🚀 Importar Dados", type="primary"):
-                        with st.spinner("Importando dados..."):
-                            sucessos, falhas, erros = estoque_manager.importar_pecas(df_import)
-                        
-                        if sucessos > 0:
-                            mostrar_mensagem("success", f"✅ {sucessos} peças importadas com sucesso!")
-                        
-                        if falhas > 0:
-                            mostrar_mensagem("warning", f"⚠️ {falhas} peças não foram importadas")
-                            
-                            if erros:
-                                with st.expander("Ver detalhes dos erros"):
-                                    for erro in erros[:10]:  # Mostrar até 10 erros
-                                        st.text(erro)
-                                    if len(erros) > 10:
-                                        st.text(f"... e mais {len(erros) - 10} erros")
-                        
-                        if sucessos > 0:
-                            st.balloons()
-                
-            except Exception as e:
-                mostrar_mensagem("error", f"Erro ao ler arquivo: {str(e)}")
-    
-    with tab2:
-        st.subheader("Exportar Dados")
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("### 📦 Exportar Peças")
-            st.write("Baixe todos os dados de peças cadastradas no sistema.")
-            
-            pecas_df, _ = estoque_manager.exportar_dados()
-            
-            if not pecas_df.empty:
-                csv_pecas = pecas_df.to_csv(index=False)
-                st.download_button(
-                    label="📥 Baixar Peças (CSV)",
-                    data=csv_pecas,
-                    file_name=f"pecas_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv"
-                )
-                
-                st.info(f"Total de {len(pecas_df)} peças disponíveis para exportação")
-            else:
-                st.warning("Nenhuma peça cadastrada para exportar")
-        
-        with col2:
-            st.markdown("### 📊 Exportar Movimentações")
-            st.write("Baixe o histórico completo de movimentações.")
-            
-            _, mov_df = estoque_manager.exportar_dados()
-            
-            if not mov_df.empty:
-                csv_mov = mov_df.to_csv(index=False)
-                st.download_button(
-                    label="📥 Baixar Movimentações (CSV)",
-                    data=csv_mov,
-                    file_name=f"movimentacoes_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv"
-                )
-                
-                st.info(f"Total de {len(mov_df)} movimentações disponíveis para exportação")
-            else:
-                st.warning("Nenhuma movimentação registrada para exportar")
-        
-        st.markdown("---")
-        
-        # Backup completo
-        st.subheader("💾 Backup Completo")
-        st.write("Faça o download de um backup completo do sistema (peças + movimentações)")
-        
-        if st.button("🔄 Gerar Backup Completo", type="primary"):
-            pecas_df, mov_df = estoque_manager.exportar_dados()
-            
-            # Criar um arquivo Excel com múltiplas abas
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                pecas_df.to_excel(writer, sheet_name='Peças', index=False)
-                mov_df.to_excel(writer, sheet_name='Movimentações', index=False)
-                
-                # Adicionar formatação
-                workbook = writer.book
-                header_format = workbook.add_format({
-                    'bold': True,
-                    'text_wrap': True,
-                    'valign': 'top',
-                    'fg_color': '#D7E4BD',
-                    'border': 1
-                })
-                
-                # Formatar cabeçalhos
-                for sheet_name in ['Peças', 'Movimentações']:
-                    worksheet = writer.sheets[sheet_name]
-                    worksheet.set_row(0, 20, header_format)
-            
-            excel_data = output.getvalue()
-            
-            st.download_button(
-                label="📥 Baixar Backup Completo (Excel)",
-                data=excel_data,
-                file_name=f"backup_completo_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-            
-            mostrar_mensagem("success", "Backup gerado com sucesso!")
 
-# Rodapé
+with tab3:
+    st.subheader("📈 Análises Avançadas")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # Análise de correlação
+        st.subheader("🔗 Correlação entre Variáveis")
+        
+        df_corr = df_filtrado[['qtd', 'custo_unitario', 'total_r_estoque']].corr()
+        
+        fig_corr = px.imshow(
+            df_corr,
+            labels=dict(x="Variável", y="Variável", color="Correlação"),
+            x=['Quantidade', 'Custo Unitário', 'Total Estoque'],
+            y=['Quantidade', 'Custo Unitário', 'Total Estoque'],
+            color_continuous_scale='RdBu',
+            aspect="auto"
+        )
+        fig_corr.update_layout(height=400)
+        st.plotly_chart(fig_corr, use_container_width=True)
+    
+    with col2:
+        # Distribuição de quantidades
+        st.subheader("📊 Distribuição de Quantidades")
+        
+        fig_hist = px.histogram(
+            df_filtrado[df_filtrado['qtd'] > 0],
+            x='qtd',
+            nbins=20,
+            title='Histograma de Quantidades em Estoque',
+            labels={'qtd': 'Quantidade', 'count': 'Frequência'}
+        )
+        fig_hist.update_layout(height=400)
+        st.plotly_chart(fig_hist, use_container_width=True)
+    
+    # Análise de outliers
+    st.subheader("🎯 Análise de Outliers")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        fig_box1 = px.box(
+            df_filtrado,
+            y='custo_unitario',
+            title='Box Plot - Custo Unitário',
+            labels={'custo_unitario': 'Custo Unitário (R$)'}
+        )
+        fig_box1.update_layout(height=300)
+        st.plotly_chart(fig_box1, use_container_width=True)
+    
+    with col2:
+        fig_box2 = px.box(
+            df_filtrado,
+            y='total_r_estoque',
+            title='Box Plot - Valor Total',
+            labels={'total_r_estoque': 'Valor Total (R$)'}
+        )
+        fig_box2.update_layout(height=300)
+        st.plotly_chart(fig_box2, use_container_width=True)
+
+with tab4:
+    st.subheader("⚠️ Alertas e Notificações")
+    
+    # Produtos com estoque zero
+    produtos_zerados = df_filtrado[df_filtrado['qtd'] == 0]
+    if not produtos_zerados.empty:
+        st.error(f"🚨 {len(produtos_zerados)} produto(s) com estoque zerado!")
+        with st.expander("Ver produtos zerados"):
+            st.dataframe(
+                produtos_zerados[['codigo', 'descricao', 'custo_unitario']],
+                use_container_width=True
+            )
+    
+    # Produtos de alto valor com baixo estoque
+    st.warning("📌 Produtos de alto valor com estoque baixo")
+    
+    # Definir produtos de alto valor (top 20% por custo unitário)
+    percentil_80 = df_filtrado['custo_unitario'].quantile(0.8)
+    produtos_alto_valor = df_filtrado[
+        (df_filtrado['custo_unitario'] >= percentil_80) & 
+        (df_filtrado['qtd'] <= 5) &
+        (df_filtrado['qtd'] > 0)
+    ]
+    
+    if not produtos_alto_valor.empty:
+        st.dataframe(
+            produtos_alto_valor[['codigo', 'descricao', 'qtd', 'custo_unitario', 'total_r_estoque']],
+            use_container_width=True
+        )
+    else:
+        st.success("✅ Nenhum produto de alto valor com estoque crítico")
+    
+    # Resumo de alertas
+    st.subheader("📊 Resumo de Alertas")
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        produtos_criticos = len(df_filtrado[df_filtrado['qtd'] <= 2])
+        st.metric(
+            "Estoque Crítico (≤ 2)",
+            produtos_criticos,
+            delta=f"{(produtos_criticos/len(df_filtrado)*100):.1f}% do total"
+        )
+    
+    with col2:
+        produtos_baixos = len(df_filtrado[(df_filtrado['qtd'] > 2) & (df_filtrado['qtd'] <= 5)])
+        st.metric(
+            "Estoque Baixo (3-5)",
+            produtos_baixos,
+            delta=f"{(produtos_baixos/len(df_filtrado)*100):.1f}% do total"
+        )
+    
+    with col3:
+        produtos_adequados = len(df_filtrado[df_filtrado['qtd'] > 5])
+        st.metric(
+            "Estoque Adequado (> 5)",
+            produtos_adequados,
+            delta=f"{(produtos_adequados/len(df_filtrado)*100):.1f}% do total"
+        )
+
+# Footer
 st.markdown("---")
 st.markdown(
-    """
-    <div style='text-align: center; color: #666;'>
-        <p>SIG CFA 112 - Sistema de Gestão de Estoque v2.0</p>
-        <p>Desenvolvido por Matheus Martins Lopes usando Streamlit</p>
-    </div>
-    """,
+    f"<div style='text-align: center; color: gray;'>Sistema de Gestão de Estoque v2.0 | "
+    f"Última atualização: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}</div>",
     unsafe_allow_html=True
 )
