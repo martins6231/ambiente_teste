@@ -4,10 +4,11 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import io
+import numpy as np
 
 # Configuração da página
 st.set_page_config(
-    page_title="Sistema de Gestão de Estoque",
+    page_title="Sistema de Gestão de Estoque - SIG CFA 112",
     page_icon="📦",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -17,427 +18,526 @@ st.set_page_config(
 st.markdown("""
 <style>
     .main-header {
-        font-size: 3rem;
+        font-size: 2.5rem;
         color: #1f77b4;
         text-align: center;
+        padding: 1rem;
+        background-color: #f0f2f6;
+        border-radius: 10px;
         margin-bottom: 2rem;
     }
     .metric-card {
-        background-color: #f0f2f6;
+        background-color: #ffffff;
         padding: 1rem;
-        border-radius: 0.5rem;
+        border-radius: 10px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         text-align: center;
     }
-    .stTabs [data-baseweb="tab-list"] button [data-testid="stMarkdownContainer"] p {
-        font-size: 1.2rem;
+    .stButton > button {
+        width: 100%;
+        background-color: #1f77b4;
+        color: white;
+    }
+    .success-message {
+        padding: 1rem;
+        border-radius: 5px;
+        background-color: #d4edda;
+        border: 1px solid #c3e6cb;
+        color: #155724;
+    }
+    .warning-message {
+        padding: 1rem;
+        border-radius: 5px;
+        background-color: #fff3cd;
+        border: 1px solid #ffeeba;
+        color: #856404;
+    }
+    .error-message {
+        padding: 1rem;
+        border-radius: 5px;
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        color: #721c24;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Inicialização do session state
-if 'df_estoque' not in st.session_state:
-    # Dados da planilha
-    data = {
-        'codigo': [888443216, 888443206, 860144291, 829341254, 870135114, 888489147, 888487020, 
-                   870110216, 888487023, 888489008, 860604041, 861590054, 860144031, 829228753, 
-                   860123728, 870145770, 870110110, 888316221, 860123552, 860123870, 877744152, 
-                   850144502, 940212331, 888308765, 888314728, 870180061, 888317803, 888443215, 
-                   829300605, 888443205, 860123553, 888306715, 860144710, 829228817, 888306713, 
-                   829341253, 888351027, 888316036, 888316009, 870123411, 860198377, 829286002, 
-                   829285188, 829284605, 829247981, 829340874, 829213085, 829248898, 829247920, 
-                   870123419],
-        'descricao': ['CABEÇA ARTICULADA 16XM16LH', 'CABEÇA ARTICULADA 16XM16', 'VÁLVULA PILOTO 500MM', 
-                      'CORREIA DENTADA', 'POLIA DE DESVIO', 'TUBO DE PLÁSTICO 8X1 -PA 11 W-GN', 
-                      'UNIÃO ANGULAR C8X1/8', 'ANILHA DE BORRACHA', 'UNIÃO ANGULAR', 
-                      'TUBO DE PLÁSTICO 6X1', 'EXAUSTOR CB6 FA. ACLA', 'JGO. PEÇAS DESGASTE FUER 861590053', 
-                      'SILENCIADOR G 1-8', 'ANEL DE RETENÇÃO', 'ENCAIXE DO FILTRO 55X4; 90-110', 
-                      'BIGORNA CFA112 RS COMPLETE', 'CILINDRO', 'ANEL DE RETENÇÃO', 'O-RING 6X1,5 - NBR', 
-                      'O-RING ASSÉPTICO 152 X 5', 'VÁLV. DISTRIB. 5/2 V581-ISO1', 
-                      'CORPO DA VÁLVULA 5-2MONOSTABLE VDMA01', 'CORPO DA VÁLVULA 5-3 GESCHL. VDMA01', 
-                      'ARRUELA DE PRESSÃO B10', 'PINO CILÍNDRICO 4X16', 'ROLO CASTER ROLL.501RL2CG', 
-                      'DISCO A 5,3-X12', 'CABEÇA ARTICULADA 10XM10LH', 'FACA', 'CABEÇA ARTICULADA 10XM10', 
-                      'O-RING 16X3 - EPDM', 'PORCA SEXTAVADA M10-A2', 'SILENCIADOR G 3-8', 
-                      'ANEL DE RETENÇÃO', 'PORCA SEXTAVADA M6-A2', 'ROLAMENTO DE ESFERA', 
-                      'ROLAMENTO DE ESFERAS ESTRIADA 6302-2RS1', 'ANEL DE RETENÇÃO', 'ANEL DE RETENÇÃO', 
-                      'O-RING 24,77X5,33', 'BATERIA S7-400 SPEKTRUM', 'BORRACHA', 'TAÇA DE ASPIRAÇÃO', 
-                      'RODA DENTADA Z=24 D=25X25', 'CILINDRO PNEUMÁTICO', 'SILENCIADOR', 'MOLA DE PRESSÃO', 
-                      'POLIA DE DESVIO', 'TAPETE TRANSPORTADOR B=400MM L=3950MM', 'FOLE DE PASSAGEM'],
-        'qtd': [3, 3, 17, 2, 1, 6, 9, 4, 8, 12, 24, 1, 5, 2, 1, 1, 4, 6, 1, 1, 8, 8, 4, 4, 1, 
-                2, 4, 1, 1, 1, 3, 3, 14, 5, 4, 2, 2, 1, 1, 1, 2, 1, 4, 7, 2, 1, 2, 3, 0, 5],
-        'custo_unitario': [233.09, 287.19, 1243.55, 2400.17, 1045.95, 20.36, 36.73, 26.16, 66.78, 
-                           42.62, 78.98, 5154.86, 37.83, 14.99, 213.06, 14941.33, 10089.93, 23.39, 
-                           5.09, 87.74, 1167.65, 993.46, 2980.39, 0.47, 5.52, 154.22, 0.21, 201.63, 
-                           1431.05, 174.84, 39.89, 0.89, 64.36, 28.37, 0.21, 1744.2, 115.78, 44.82, 
-                           1.91, 70.25, 191.87, 112.12, 196.04, 283.03, 728.9, 456.67, 112.12, 
-                           9513.96, 0, 6814.81],
-        'total_r_estoque': [699.27, 861.57, 21140.35, 4800.34, 1045.95, 122.16, 330.57, 104.64, 
-                            534.24, 511.44, 1895.52, 5154.86, 189.15, 29.98, 213.06, 14941.33, 
-                            40359.72, 140.34, 5.09, 87.74, 9341.2, 7947.68, 11921.56, 1.88, 5.52, 
-                            308.44, 0.84, 201.63, 1431.05, 174.84, 119.67, 2.67, 901.04, 141.85, 
-                            0.84, 3488.4, 231.56, 44.82, 1.91, 70.25, 383.74, 112.12, 784.16, 
-                            1981.21, 1457.8, 456.67, 224.24, 28541.88, 0, 34074.05]
-    }
-    
-    st.session_state.df_estoque = pd.DataFrame(data)
+# Inicializar session state
+if 'df' not in st.session_state:
+    st.session_state.df = None
+if 'historico_movimentacoes' not in st.session_state:
+    st.session_state.historico_movimentacoes = pd.DataFrame(
+        columns=['data_hora', 'tipo', 'codigo', 'descricao', 'quantidade', 'usuario']
+    )
 
-# Título principal
-st.markdown('<h1 class="main-header">📦 Sistema de Gestão de Estoque</h1>', unsafe_allow_html=True)
+# Função para carregar dados
+@st.cache_data
+def carregar_dados(file):
+    try:
+        df = pd.read_excel(file)
+        # Garantir que as colunas numéricas estejam no formato correto
+        df['qtde_estoque'] = pd.to_numeric(df['qtde_estoque'], errors='coerce').fillna(0)
+        df['preco_unitario'] = pd.to_numeric(df['preco_unitario'], errors='coerce').fillna(0)
+        df['total_r_estoque'] = df['qtde_estoque'] * df['preco_unitario']
+        return df
+    except Exception as e:
+        st.error(f"Erro ao carregar arquivo: {str(e)}")
+        return None
+
+# Função para registrar movimentação
+def registrar_movimentacao(tipo, codigo, descricao, quantidade, usuario="Sistema"):
+    nova_movimentacao = pd.DataFrame({
+        'data_hora': [datetime.now()],
+        'tipo': [tipo],
+        'codigo': [codigo],
+        'descricao': [descricao],
+        'quantidade': [quantidade],
+        'usuario': [usuario]
+    })
+    st.session_state.historico_movimentacoes = pd.concat(
+        [st.session_state.historico_movimentacoes, nova_movimentacao], 
+        ignore_index=True
+    )
+
+# Header
+st.markdown('<h1 class="main-header">📦 Sistema de Gestão de Estoque - SIG CFA 112</h1>', unsafe_allow_html=True)
 
 # Sidebar
 with st.sidebar:
-    st.header("⚙️ Configurações")
+    st.header("📁 Carregar Dados")
+    uploaded_file = st.file_uploader(
+        "Selecione o arquivo Excel",
+        type=['xlsx', 'xls'],
+        help="Faça upload do arquivo de estoque"
+    )
+    
+    if uploaded_file is not None:
+        df = carregar_dados(uploaded_file)
+        if df is not None:
+            st.session_state.df = df
+            st.success(f"✅ Arquivo carregado: {len(df)} itens")
+    
+    st.divider()
     
     # Filtros
-    st.subheader("🔍 Filtros")
-    
-    # Filtro por descrição
-    descricoes = ['Todos'] + sorted(st.session_state.df_estoque['descricao'].unique().tolist())
-    descricao_selecionada = st.selectbox("Descrição do Produto", descricoes)
-    
-    # Filtro por faixa de quantidade
-    qtd_min, qtd_max = st.slider(
-        "Faixa de Quantidade",
-        min_value=0,
-        max_value=int(st.session_state.df_estoque['qtd'].max()),
-        value=(0, int(st.session_state.df_estoque['qtd'].max()))
-    )
-    
-    # Filtro por faixa de valor
-    valor_min, valor_max = st.slider(
-        "Faixa de Valor Total (R$)",
-        min_value=0.0,
-        max_value=float(st.session_state.df_estoque['total_r_estoque'].max()),
-        value=(0.0, float(st.session_state.df_estoque['total_r_estoque'].max())),
-        format="R$ %.2f"
-    )
-
-# Aplicar filtros
-df_filtrado = st.session_state.df_estoque.copy()
-
-if descricao_selecionada != 'Todos':
-    df_filtrado = df_filtrado[df_filtrado['descricao'] == descricao_selecionada]
-
-df_filtrado = df_filtrado[
-    (df_filtrado['qtd'] >= qtd_min) & 
-    (df_filtrado['qtd'] <= qtd_max) &
-    (df_filtrado['total_r_estoque'] >= valor_min) & 
-    (df_filtrado['total_r_estoque'] <= valor_max)
-]
-
-# Métricas principais
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    st.metric(
-        "Total de Produtos",
-        f"{len(df_filtrado):,}",
-        delta=f"{len(df_filtrado) - len(st.session_state.df_estoque)} filtrados"
-    )
-
-with col2:
-    st.metric(
-        "Valor Total em Estoque",
-        f"R$ {df_filtrado['total_r_estoque'].sum():,.2f}"
-    )
-
-with col3:
-    st.metric(
-        "Quantidade Total",
-        f"{df_filtrado['qtd'].sum():,}"
-    )
-
-with col4:
-    st.metric(
-        "Ticket Médio",
-        f"R$ {df_filtrado['custo_unitario'].mean():,.2f}"
-    )
-
-# Tabs principais
-tab1, tab2, tab3, tab4 = st.tabs(["📊 Dashboard", "📋 Gestão de Produtos", "📈 Análises", "⚠️ Alertas"])
-
-with tab1:
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Top 10 produtos por valor
-        top_produtos = df_filtrado.nlargest(10, 'total_r_estoque')
-        fig_top = px.bar(
-            top_produtos,
-            x='total_r_estoque',
-            y='descricao',
-            orientation='h',
-            title='Top 10 Produtos por Valor em Estoque',
-            labels={'total_r_estoque': 'Valor Total (R$)', 'descricao': 'Produto'},
-            color='total_r_estoque',
-            color_continuous_scale='Blues'
-        )
-        fig_top.update_layout(height=400, showlegend=False)
-        st.plotly_chart(fig_top, use_container_width=True)
-    
-    with col2:
-        # Distribuição de valores
-        fig_dist = px.pie(
-            df_filtrado.nlargest(10, 'total_r_estoque'),
-            values='total_r_estoque',
-            names='descricao',
-            title='Distribuição do Valor em Estoque (Top 10)'
-        )
-        fig_dist.update_layout(height=400)
-        st.plotly_chart(fig_dist, use_container_width=True)
-    
-    # Análise de Pareto
-    st.subheader("📊 Análise de Pareto (Curva ABC)")
-    
-    # Preparar dados para Pareto
-    df_pareto = df_filtrado.sort_values('total_r_estoque', ascending=False).copy()
-    df_pareto['percentual_valor'] = (df_pareto['total_r_estoque'] / df_pareto['total_r_estoque'].sum()) * 100
-    df_pareto['percentual_acumulado'] = df_pareto['percentual_valor'].cumsum()
-    df_pareto['percentual_itens'] = (range(1, len(df_pareto) + 1) / len(df_pareto)) * 100
-    
-    # Classificação ABC
-    df_pareto['classificacao'] = pd.cut(
-        df_pareto['percentual_acumulado'],
-        bins=[0, 80, 95, 100],
-        labels=['A', 'B', 'C']
-    )
-    
-    # Gráfico de Pareto
-    fig_pareto = go.Figure()
-    
-    fig_pareto.add_trace(go.Bar(
-        x=df_pareto.index,
-        y=df_pareto['percentual_valor'],
-        name='% do Valor',
-        yaxis='y',
-        marker_color='lightblue'
-    ))
-    
-    fig_pareto.add_trace(go.Scatter(
-        x=df_pareto.index,
-        y=df_pareto['percentual_acumulado'],
-        name='% Acumulado',
-        yaxis='y2',
-        line=dict(color='red', width=2)
-    ))
-    
-    fig_pareto.update_layout(
-        title='Curva ABC - Análise de Pareto',
-        xaxis=dict(title='Produtos'),
-        yaxis=dict(title='% do Valor Total', side='left'),
-        yaxis2=dict(title='% Acumulado', overlaying='y', side='right'),
-        hovermode='x unified',
-        height=400
-    )
-    
-    st.plotly_chart(fig_pareto, use_container_width=True)
-    
-    # Resumo ABC
-    col1, col2, col3 = st.columns(3)
-    
-    for col, classe in zip([col1, col2, col3], ['A', 'B', 'C']):
-        with col:
-            classe_df = df_pareto[df_pareto['classificacao'] == classe]
-            st.metric(
-                f"Classe {classe}",
-                f"{len(classe_df)} produtos",
-                f"R$ {classe_df['total_r_estoque'].sum():,.2f}"
-            )
-
-with tab2:
-    st.subheader("📋 Tabela de Produtos")
-    
-    # Opções de visualização
-    col1, col2, col3 = st.columns([2, 2, 1])
-    
-    with col1:
-        ordenar_por = st.selectbox(
-            "Ordenar por",
-            ['codigo', 'descricao', 'qtd', 'custo_unitario', 'total_r_estoque']
-        )
-    
-    with col2:
-        ordem = st.radio("Ordem", ['Crescente', 'Decrescente'], horizontal=True)
-    
-    with col3:
-        mostrar_zeros = st.checkbox("Mostrar produtos zerados", value=True)
-    
-    # Aplicar ordenação
-    df_tabela = df_filtrado.copy()
-    if not mostrar_zeros:
-        df_tabela = df_tabela[df_tabela['qtd'] > 0]
-    
-    df_tabela = df_tabela.sort_values(ordenar_por, ascending=(ordem == 'Crescente'))
-    
-    # Formatar valores para exibição
-    df_display = df_tabela.copy()
-    df_display['custo_unitario'] = df_display['custo_unitario'].apply(lambda x: f"R$ {x:,.2f}")
-    df_display['total_r_estoque'] = df_display['total_r_estoque'].apply(lambda x: f"R$ {x:,.2f}")
-    
-    # Exibir tabela
-    st.dataframe(
-        df_display,
-        use_container_width=True,
-        height=400,
-        column_config={
-            "codigo": st.column_config.NumberColumn("Código", format="%d"),
-            "descricao": st.column_config.TextColumn("Descrição"),
-            "qtd": st.column_config.NumberColumn("Quantidade", format="%d"),
-            "custo_unitario": "Custo Unitário",
-            "total_r_estoque": "Total em Estoque"
-        }
-    )
-    
-    # Botões de ação
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("🔄 Atualizar Estoque", use_container_width=True):
-            st.info("Funcionalidade de atualização em desenvolvimento")
-    
-    with col2:
-        if st.button("➕ Adicionar Produto", use_container_width=True):
-            st.info("Funcionalidade de adição em desenvolvimento")
-    
-    with col3:
-        # Exportar para Excel
-        buffer = io.BytesIO()
-        with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-            df_tabela.to_excel(writer, sheet_name='Estoque', index=False)
+    if st.session_state.df is not None:
+        st.header("🔍 Filtros")
         
-        st.download_button(
-            label="📥 Exportar Excel",
-            data=buffer.getvalue(),
-            file_name=f"estoque_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
+        # Filtro por categoria
+        categorias = ['Todas'] + sorted(st.session_state.df['categoria'].unique().tolist())
+        categoria_selecionada = st.selectbox("Categoria", categorias)
+        
+        # Filtro por faixa de preço
+        preco_min = float(st.session_state.df['preco_unitario'].min())
+        preco_max = float(st.session_state.df['preco_unitario'].max())
+        faixa_preco = st.slider(
+            "Faixa de Preço (R$)",
+            preco_min,
+            preco_max,
+            (preco_min, preco_max)
+        )
+        
+        # Filtro por estoque mínimo
+        estoque_minimo = st.number_input(
+            "Mostrar itens com estoque abaixo de:",
+            min_value=0,
+            value=10,
+            step=1
         )
 
-with tab3:
-    st.subheader("📈 Análises Avançadas")
+# Conteúdo principal
+if st.session_state.df is not None:
+    df = st.session_state.df.copy()
     
-    col1, col2 = st.columns(2)
+    # Aplicar filtros
+    df_filtrado = df.copy()
+    if categoria_selecionada != 'Todas':
+        df_filtrado = df_filtrado[df_filtrado['categoria'] == categoria_selecionada]
     
-    with col1:
-        # Análise de correlação
-        st.subheader("🔗 Correlação entre Variáveis")
-        
-        df_corr = df_filtrado[['qtd', 'custo_unitario', 'total_r_estoque']].corr()
-        
-        fig_corr = px.imshow(
-            df_corr,
-            labels=dict(x="Variável", y="Variável", color="Correlação"),
-            x=['Quantidade', 'Custo Unitário', 'Total Estoque'],
-            y=['Quantidade', 'Custo Unitário', 'Total Estoque'],
-            color_continuous_scale='RdBu',
-            aspect="auto"
-        )
-        fig_corr.update_layout(height=400)
-        st.plotly_chart(fig_corr, use_container_width=True)
-    
-    with col2:
-        # Distribuição de quantidades
-        st.subheader("📊 Distribuição de Quantidades")
-        
-        fig_hist = px.histogram(
-            df_filtrado[df_filtrado['qtd'] > 0],
-            x='qtd',
-            nbins=20,
-            title='Histograma de Quantidades em Estoque',
-            labels={'qtd': 'Quantidade', 'count': 'Frequência'}
-        )
-        fig_hist.update_layout(height=400)
-        st.plotly_chart(fig_hist, use_container_width=True)
-    
-    # Análise de outliers
-    st.subheader("🎯 Análise de Outliers")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        fig_box1 = px.box(
-            df_filtrado,
-            y='custo_unitario',
-            title='Box Plot - Custo Unitário',
-            labels={'custo_unitario': 'Custo Unitário (R$)'}
-        )
-        fig_box1.update_layout(height=300)
-        st.plotly_chart(fig_box1, use_container_width=True)
-    
-    with col2:
-        fig_box2 = px.box(
-            df_filtrado,
-            y='total_r_estoque',
-            title='Box Plot - Valor Total',
-            labels={'total_r_estoque': 'Valor Total (R$)'}
-        )
-        fig_box2.update_layout(height=300)
-        st.plotly_chart(fig_box2, use_container_width=True)
-
-with tab4:
-    st.subheader("⚠️ Alertas e Notificações")
-    
-    # Produtos com estoque zero
-    produtos_zerados = df_filtrado[df_filtrado['qtd'] == 0]
-    if not produtos_zerados.empty:
-        st.error(f"🚨 {len(produtos_zerados)} produto(s) com estoque zerado!")
-        with st.expander("Ver produtos zerados"):
-            st.dataframe(
-                produtos_zerados[['codigo', 'descricao', 'custo_unitario']],
-                use_container_width=True
-            )
-    
-    # Produtos de alto valor com baixo estoque
-    st.warning("📌 Produtos de alto valor com estoque baixo")
-    
-    # Definir produtos de alto valor (top 20% por custo unitário)
-    percentil_80 = df_filtrado['custo_unitario'].quantile(0.8)
-    produtos_alto_valor = df_filtrado[
-        (df_filtrado['custo_unitario'] >= percentil_80) & 
-        (df_filtrado['qtd'] <= 5) &
-        (df_filtrado['qtd'] > 0)
+    df_filtrado = df_filtrado[
+        (df_filtrado['preco_unitario'] >= faixa_preco[0]) &
+        (df_filtrado['preco_unitario'] <= faixa_preco[1])
     ]
     
-    if not produtos_alto_valor.empty:
+    # Tabs principais
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "📊 Dashboard", 
+        "📋 Estoque", 
+        "➕ Cadastrar Peça",
+        "📤 Registrar Saída",
+        "📈 Análise ABC",
+        "📜 Histórico"
+    ])
+    
+    with tab1:
+        # Métricas principais
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            total_itens = len(df_filtrado)
+            st.metric("Total de Itens", f"{total_itens:,}")
+        
+        with col2:
+            valor_total = df_filtrado['total_r_estoque'].sum()
+            st.metric("Valor Total em Estoque", f"R$ {valor_total:,.2f}")
+        
+        with col3:
+            itens_baixo_estoque = len(df_filtrado[df_filtrado['qtde_estoque'] < estoque_minimo])
+            st.metric("Itens com Baixo Estoque", itens_baixo_estoque)
+        
+        with col4:
+            categorias_unicas = df_filtrado['categoria'].nunique()
+            st.metric("Categorias", categorias_unicas)
+        
+        st.divider()
+        
+        # Gráficos
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Gráfico de pizza por categoria
+            df_categoria = df_filtrado.groupby('categoria')['total_r_estoque'].sum().reset_index()
+            fig_pizza = px.pie(
+                df_categoria,
+                values='total_r_estoque',
+                names='categoria',
+                title='Distribuição do Valor por Categoria'
+            )
+            st.plotly_chart(fig_pizza, use_container_width=True)
+        
+        with col2:
+            # Top 10 produtos por valor
+            top_produtos = df_filtrado.nlargest(10, 'total_r_estoque')
+            fig_bar = px.bar(
+                top_produtos,
+                x='total_r_estoque',
+                y='descricao',
+                orientation='h',
+                title='Top 10 Produtos por Valor em Estoque',
+                labels={'total_r_estoque': 'Valor Total (R$)', 'descricao': 'Produto'}
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+        
+        # Produtos com baixo estoque
+        st.subheader(f"⚠️ Produtos com Estoque Abaixo de {estoque_minimo} Unidades")
+        produtos_baixo_estoque = df_filtrado[df_filtrado['qtde_estoque'] < estoque_minimo]
+        if not produtos_baixo_estoque.empty:
+            st.dataframe(
+                produtos_baixo_estoque[['codigo', 'descricao', 'qtde_estoque', 'categoria']],
+                use_container_width=True
+            )
+        else:
+            st.info("Nenhum produto com estoque baixo.")
+    
+    with tab2:
+        st.subheader("📋 Listagem Completa do Estoque")
+        
+        # Busca
+        busca = st.text_input("🔍 Buscar por código ou descrição")
+        
+        if busca:
+            df_busca = df_filtrado[
+                df_filtrado['codigo'].astype(str).str.contains(busca, case=False) |
+                df_filtrado['descricao'].str.contains(busca, case=False)
+            ]
+        else:
+            df_busca = df_filtrado
+        
+        # Exibir dataframe
         st.dataframe(
-            produtos_alto_valor[['codigo', 'descricao', 'qtd', 'custo_unitario', 'total_r_estoque']],
+            df_busca.style.format({
+                'preco_unitario': 'R$ {:.2f}',
+                'total_r_estoque': 'R$ {:.2f}'
+            }),
             use_container_width=True
         )
-    else:
-        st.success("✅ Nenhum produto de alto valor com estoque crítico")
-    
-    # Resumo de alertas
-    st.subheader("📊 Resumo de Alertas")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        produtos_criticos = len(df_filtrado[df_filtrado['qtd'] <= 2])
-        st.metric(
-            "Estoque Crítico (≤ 2)",
-            produtos_criticos,
-            delta=f"{(produtos_criticos/len(df_filtrado)*100):.1f}% do total"
+        
+        # Download
+        csv = df_busca.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Baixar CSV",
+            data=csv,
+            file_name=f'estoque_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+            mime='text/csv'
         )
     
-    with col2:
-        produtos_baixos = len(df_filtrado[(df_filtrado['qtd'] > 2) & (df_filtrado['qtd'] <= 5)])
-        st.metric(
-            "Estoque Baixo (3-5)",
-            produtos_baixos,
-            delta=f"{(produtos_baixos/len(df_filtrado)*100):.1f}% do total"
+    with tab3:
+        st.subheader("➕ Cadastrar Nova Peça")
+        
+        with st.form("cadastro_peca"):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                novo_codigo = st.text_input("Código da Peça*")
+                nova_descricao = st.text_input("Descrição*")
+                nova_categoria = st.selectbox(
+                    "Categoria*",
+                    sorted(df['categoria'].unique())
+                )
+            
+            with col2:
+                nova_quantidade = st.number_input("Quantidade*", min_value=0, step=1)
+                novo_preco = st.number_input("Preço Unitário (R$)*", min_value=0.0, step=0.01)
+                nova_unidade = st.selectbox(
+                    "Unidade de Medida*",
+                    sorted(df['unidade_medida'].unique())
+                )
+            
+            submitted = st.form_submit_button("Cadastrar Peça")
+            
+            if submitted:
+                if novo_codigo and nova_descricao:
+                    # Verificar se código já existe
+                    if novo_codigo in st.session_state.df['codigo'].values:
+                        st.error("❌ Código já existe no estoque!")
+                    else:
+                        # Adicionar nova peça
+                        nova_peca = pd.DataFrame({
+                            'codigo': [novo_codigo],
+                            'descricao': [nova_descricao],
+                            'categoria': [nova_categoria],
+                            'unidade_medida': [nova_unidade],
+                            'qtde_estoque': [nova_quantidade],
+                            'preco_unitario': [novo_preco],
+                            'total_r_estoque': [nova_quantidade * novo_preco]
+                        })
+                        
+                        st.session_state.df = pd.concat([st.session_state.df, nova_peca], ignore_index=True)
+                        registrar_movimentacao("ENTRADA", novo_codigo, nova_descricao, nova_quantidade)
+                        st.success("✅ Peça cadastrada com sucesso!")
+                        st.rerun()
+                else:
+                    st.error("❌ Preencha todos os campos obrigatórios!")
+    
+    with tab4:
+        st.subheader("📤 Registrar Saída de Estoque")
+        
+        with st.form("saida_estoque"):
+            # Seleção de produto
+            produtos = df['codigo'].astype(str) + ' - ' + df['descricao']
+            produto_selecionado = st.selectbox("Selecione o Produto*", produtos)
+            
+            if produto_selecionado:
+                codigo_selecionado = produto_selecionado.split(' - ')[0]
+                produto_info = df[df['codigo'] == codigo_selecionado].iloc[0]
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.info(f"Estoque Atual: {produto_info['qtde_estoque']} {produto_info['unidade_medida']}")
+                with col2:
+                    st.info(f"Valor Unitário: R$ {produto_info['preco_unitario']:.2f}")
+                
+                quantidade_saida = st.number_input(
+                    "Quantidade de Saída*",
+                    min_value=1,
+                    max_value=int(produto_info['qtde_estoque']),
+                    step=1
+                )
+                
+                motivo_saida = st.text_area("Motivo da Saída")
+                
+                submitted = st.form_submit_button("Registrar Saída")
+                
+                if submitted:
+                    # Atualizar estoque
+                    idx = st.session_state.df[st.session_state.df['codigo'] == codigo_selecionado].index[0]
+                    st.session_state.df.loc[idx, 'qtde_estoque'] -= quantidade_saida
+                    st.session_state.df.loc[idx, 'total_r_estoque'] = (
+                        st.session_state.df.loc[idx, 'qtde_estoque'] * 
+                        st.session_state.df.loc[idx, 'preco_unitario']
+                    )
+                    
+                    # Registrar movimentação
+                    registrar_movimentacao(
+                        "SAÍDA",
+                        codigo_selecionado,
+                        produto_info['descricao'],
+                        quantidade_saida
+                    )
+                    
+                    st.success(f"✅ Saída registrada: {quantidade_saida} {produto_info['unidade_medida']}")
+                    st.rerun()
+    
+    with tab5:
+        st.subheader("📈 Análise ABC - Curva de Pareto")
+        
+        # Preparar dados para análise ABC
+        df_pareto = df_filtrado.sort_values('total_r_estoque', ascending=False).copy()
+        df_pareto['percentual_valor'] = (df_pareto['total_r_estoque'] / df_pareto['total_r_estoque'].sum()) * 100
+        df_pareto['percentual_acumulado'] = df_pareto['percentual_valor'].cumsum()
+        
+        # Corrigir o erro: converter range para numpy array
+        df_pareto['percentual_itens'] = (np.arange(1, len(df_pareto) + 1) / len(df_pareto)) * 100
+        
+        # Classificação ABC
+        df_pareto['classificacao'] = pd.cut(
+            df_pareto['percentual_acumulado'],
+            bins=[0, 80, 95, 100],
+            labels=['A', 'B', 'C']
+        )
+        
+        # Gráfico de Pareto
+        fig_pareto = go.Figure()
+        
+        # Barras
+        fig_pareto.add_trace(go.Bar(
+            x=df_pareto.index,
+            y=df_pareto['percentual_valor'],
+            name='% do Valor',
+            yaxis='y',
+            marker_color='lightblue'
+        ))
+        
+        # Linha acumulada
+        fig_pareto.add_trace(go.Scatter(
+            x=df_pareto.index,
+            y=df_pareto['percentual_acumulado'],
+            name='% Acumulado',
+            yaxis='y2',
+            line=dict(color='red', width=2)
+        ))
+        
+        # Layout
+        fig_pareto.update_layout(
+            title='Curva ABC - Análise de Pareto',
+            xaxis=dict(title='Produtos (ordenados por valor)'),
+            yaxis=dict(title='% do Valor Total', side='left'),
+            yaxis2=dict(title='% Acumulado', overlaying='y', side='right'),
+            hovermode='x',
+            height=500
+        )
+        
+        st.plotly_chart(fig_pareto, use_container_width=True)
+        
+        # Resumo ABC
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            classe_a = df_pareto[df_pareto['classificacao'] == 'A']
+            st.metric(
+                "Classe A",
+                f"{len(classe_a)} itens",
+                f"{classe_a['percentual_valor'].sum():.1f}% do valor"
+            )
+        
+        with col2:
+            classe_b = df_pareto[df_pareto['classificacao'] == 'B']
+            st.metric(
+                "Classe B",
+                f"{len(classe_b)} itens",
+                f"{classe_b['percentual_valor'].sum():.1f}% do valor"
+            )
+        
+        with col3:
+            classe_c = df_pareto[df_pareto['classificacao'] == 'C']
+            st.metric(
+                "Classe C",
+                f"{len(classe_c)} itens",
+                f"{classe_c['percentual_valor'].sum():.1f}% do valor"
+            )
+        
+        # Tabela detalhada
+        st.subheader("Detalhamento por Classe")
+        classe_selecionada = st.selectbox("Selecione a Classe", ['A', 'B', 'C'])
+        
+        df_classe = df_pareto[df_pareto['classificacao'] == classe_selecionada]
+        st.dataframe(
+            df_classe[['codigo', 'descricao', 'qtde_estoque', 'total_r_estoque', 'percentual_valor', 'percentual_acumulado']].style.format({
+                'total_r_estoque': 'R$ {:.2f}',
+                'percentual_valor': '{:.2f}%',
+                'percentual_acumulado': '{:.2f}%'
+            }),
+            use_container_width=True
         )
     
-    with col3:
-        produtos_adequados = len(df_filtrado[df_filtrado['qtd'] > 5])
-        st.metric(
-            "Estoque Adequado (> 5)",
-            produtos_adequados,
-            delta=f"{(produtos_adequados/len(df_filtrado)*100):.1f}% do total"
-        )
+    with tab6:
+        st.subheader("📜 Histórico de Movimentações")
+        
+        if not st.session_state.historico_movimentacoes.empty:
+            # Filtros do histórico
+            col1, col2 = st.columns(2)
+            with col1:
+                tipo_mov = st.selectbox(
+                    "Tipo de Movimentação",
+                    ['Todas', 'ENTRADA', 'SAÍDA']
+                )
+            with col2:
+                dias_historico = st.selectbox(
+                    "Período",
+                    [1, 7, 30, 90, 365],
+                    format_func=lambda x: f"Últimos {x} dias"
+                )
+            
+            # Filtrar histórico
+            historico = st.session_state.historico_movimentacoes.copy()
+            if tipo_mov != 'Todas':
+                historico = historico[historico['tipo'] == tipo_mov]
+            
+            # Ordenar por data mais recente
+            historico = historico.sort_values('data_hora', ascending=False)
+            
+            # Exibir histórico
+            st.dataframe(
+                historico.style.apply(
+                    lambda x: ['background-color: #d4edda' if x['tipo'] == 'ENTRADA' 
+                              else 'background-color: #f8d7da' for _ in x], axis=1
+                ),
+                use_container_width=True
+            )
+            
+            # Estatísticas do histórico
+            st.subheader("📊 Estatísticas de Movimentação")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                total_entradas = len(historico[historico['tipo'] == 'ENTRADA'])
+                st.metric("Total de Entradas", total_entradas)
+            
+            with col2:
+                total_saidas = len(historico[historico['tipo'] == 'SAÍDA'])
+                st.metric("Total de Saídas", total_saidas)
+            
+            with col3:
+                total_movimentacoes = len(historico)
+                st.metric("Total de Movimentações", total_movimentacoes)
+        else:
+            st.info("Nenhuma movimentação registrada ainda.")
+
+else:
+    # Tela inicial quando não há dados carregados
+    st.info("👈 Por favor, carregue um arquivo Excel na barra lateral para começar.")
+    
+    # Instruções
+    with st.expander("📖 Como usar o sistema"):
+        st.markdown("""
+        1. **Carregar Dados**: Use a barra lateral para fazer upload do arquivo Excel com os dados do estoque
+        2. **Dashboard**: Visualize métricas e gráficos importantes sobre seu estoque
+        3. **Estoque**: Consulte e pesquise produtos no estoque
+        4. **Cadastrar Peça**: Adicione novas peças ao estoque
+        5. **Registrar Saída**: Registre saídas de produtos do estoque
+        6. **Análise ABC**: Visualize a curva de Pareto e classificação ABC dos produtos
+        7. **Histórico**: Acompanhe todas as movimentações realizadas
+        """)
+    
+    # Formato esperado
+    with st.expander("📋 Formato esperado do arquivo Excel"):
+        st.markdown("""
+        O arquivo Excel deve conter as seguintes colunas:
+        - **codigo**: Código único do produto
+        - **descricao**: Descrição do produto
+        - **categoria**: Categoria do produto
+        - **unidade_medida**: Unidade de medida (UN, KG, etc.)
+        - **qtde_estoque**: Quantidade em estoque
+        - **preco_unitario**: Preço unitário do produto
+        """)
 
 # Footer
-st.markdown("---")
+st.divider()
 st.markdown(
-    f"<div style='text-align: center; color: gray;'>Sistema de Gestão de Estoque v2.0 | "
-    f"Última atualização: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}</div>",
+    """
+    <div style='text-align: center; color: #666;'>
+        <p>Sistema de Gestão de Estoque - SIG CFA 112 | Desenvolvido com Streamlit 🚀</p>
+    </div>
+    """,
     unsafe_allow_html=True
 )
